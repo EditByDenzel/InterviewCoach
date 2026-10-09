@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "InterviewCoach",
+    "slug": "interviewcoach",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0f1e"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.interviewcoach.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "InterviewCoach needs microphone access to record your interview answers.",
+        "NSSpeechRecognitionUsageDescription": "InterviewCoach uses speech recognition to transcribe your answers."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0f1e"
+      },
+      "package": "com.interviewcoach.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow InterviewCoach to access your microphone to record interview answers."
+        }
+      ]
+    ],
+    "sdkVersion": "51.0.0"
+  }
+}
