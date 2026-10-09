@@ -25,8 +25,17 @@ export default function HomeScreen({navigation,route}:Props) {
  useEffect(()=>{if(route.params?.topic){setTopic(route.params.topic);navigation.setParams({topic:undefined});}},[route.params?.topic,navigation]);
  const start=()=>{
   if(!topic.trim()){setValidation('Enter a topic or choose a prompt above.');return;}
-  if(!hasApiKey){setValidation('Add your Gemini API key in Settings to begin.');return;}
-  setValidation('');navigation.navigate('Interview',{topic:topic.trim()});
+  void loadSettings().then(settings=>{
+    const key=(settings.geminiApiKey||'').trim();
+    if(!key){
+      setHasApiKey(false);
+      setValidation('Add your Gemini API key in Settings to begin.');
+      return;
+    }
+    setHasApiKey(true);
+    setValidation('');
+    navigation.navigate('Interview',{topic:topic.trim()});
+  });
  };
  return <DesignFrame><KeyboardAvoidingView aria-hidden={sidebar} accessibilityElementsHidden={sidebar} importantForAccessibility={sidebar?'no-hide-descendants':'auto'} style={styles.fill} behavior={Platform.OS==='ios'?'padding':undefined}>
   <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
