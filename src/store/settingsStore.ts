@@ -6,9 +6,9 @@ import { AppSettings, TTSProvider } from '../types';
 
 const SETTINGS_KEY = '@interview_coach_settings';
 
-/** Default empty settings */
+/** Default settings (can be pre-seeded by local .env file) */
 const DEFAULT_SETTINGS: AppSettings = {
-  geminiApiKey: '',
+  geminiApiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || '',
   elevenLabsApiKey: '',
   ttsProvider: 'gemini',
 };
