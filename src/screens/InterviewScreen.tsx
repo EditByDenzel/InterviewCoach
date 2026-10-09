@@ -41,6 +41,7 @@ import {
   Orb,
   HeroOrb,
   Waveform,
+  ProgressiveSpokenText,
 } from '../components/CoachieDesign';
 
 type Props = StackScreenProps<RootStackParamList, 'Interview'>;
@@ -236,8 +237,23 @@ export default function InterviewScreen({ navigation, route }: Props) {
     await persist({ currentQuestion: q });
     const play = async () => {
       await speak(q, completed.current.length);
+      ensureActive();
       setPhase('idle');
       retry.current = null;
+      if (!paused && alive.current && !exiting.current) {
+        try {
+          if (await requestMicrophonePermission()) {
+            await stopCandidate();
+            await startRecording();
+            if (alive.current) {
+              setSeconds(0);
+              setPhase('recording');
+            }
+          }
+        } catch (err) {
+          console.warn('[auto-listen] Could not auto-start recording:', err);
+        }
+      }
     };
     retry.current = play;
     await play();
@@ -339,10 +355,19 @@ export default function InterviewScreen({ navigation, route }: Props) {
 
   const pause = () =>
     void perform(async () => {
-      if (paused) await resumeRecording();
-      else await pauseRecording();
+      if (paused) {
+        if (phase === 'recording') await resumeRecording();
+        setPaused(false);
+      } else {
+        if (phase === 'recording') {
+          await pauseRecording();
+        } else if (phase === 'speaking') {
+          await stopPlayback();
+          setPhase('idle');
+        }
+        setPaused(true);
+      }
       ensureActive();
-      setPaused(!paused);
     });
 
   const send = () => {
@@ -448,6 +473,13 @@ export default function InterviewScreen({ navigation, route }: Props) {
     return () => clearInterval(timer);
   }, [phase, paused]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      log.current?.scrollToEnd({ animated: !reduced });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [rounds.length, phase, question, answer, reduced]);
+
   const canRecord = (phase === 'idle' && !!question && !error) || phase === 'recording';
 
   // Renders the AI Question Bubble with attached Waveform Bar
@@ -503,7 +535,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
                 </MotionPressable>
 
                 <View style={styles.aiWaveformArea}>
-                  <Waveform active={isPlaying || (isCurrent && phase === 'speaking')} progress={isPlaying ? playProgress : 0} />
+                  <Waveform active={isPlaying || (isCurrent && phase === 'speaking')} progress={isPlaying || (isCurrent && phase === 'speaking') ? playProgress : 0} />
                 </View>
 
                 <Text style={styles.aiDurationText}>{formatTime(durationSec)}</Text>
@@ -633,7 +665,12 @@ export default function InterviewScreen({ navigation, route }: Props) {
             <Text style={styles.voiceListeningStatus}>
               {error ? 'Something went wrong' : paused ? 'Recording paused' : phaseLabels[phase]}
             </Text>
-            <Text style={styles.voiceSpokenHeading}>{question || topic}</Text>
+            <ProgressiveSpokenText
+              text={question || topic}
+              progress={playProgress}
+              active={phase === 'speaking'}
+              style={styles.voiceSpokenHeading}
+            />
           </View>
 
           {/* Bottom Voice Controls */}
@@ -642,13 +679,17 @@ export default function InterviewScreen({ navigation, route }: Props) {
               <GlassButton
                 label={paused ? 'Resume recording' : 'Pause recording'}
                 onPress={pause}
-                disabled={phase !== 'recording'}
+                disabled={phase !== 'recording' && phase !== 'speaking'}
                 style={styles.sideCircleButton}
               >
-                <View style={styles.pauseBars}>
-                  <View style={styles.pauseBar} />
-                  <View style={styles.pauseBar} />
-                </View>
+                {paused ? (
+                  <DesignIcon name="play" />
+                ) : (
+                  <View style={styles.pauseBars}>
+                    <View style={styles.pauseBar} />
+                    <View style={styles.pauseBar} />
+                  </View>
+                )}
               </GlassButton>
 
               <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
@@ -670,120 +711,133 @@ export default function InterviewScreen({ navigation, route }: Props) {
       ) : (
         /* Fullscreen Chat View (Figma Frame 8:108) */
         <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView
-            ref={log}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.chatScrollContent}
-            onContentSizeChange={() => log.current?.scrollToEnd({ animated: !reduced })}
-          >
-            {/* Candidate Initial Topic Prompt (Right Aligned Sunset Orange Bubble) */}
-            <View style={styles.topicRow}>
-              <LinearGradient colors={['#FF6F26', '#FF500B', '#DE3400']} style={styles.topicBubble}>
-                <Text style={styles.topicText}>{topic}</Text>
-              </LinearGradient>
-              <Text style={styles.topicTimestamp}>
-                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
-
-            {/* Completed Interview Rounds */}
-            {rounds.map((round, idx) => (
-              <React.Fragment key={idx}>
-                {renderAiBubble(round.question, idx)}
-                {renderCandidateCard(round.answer, idx)}
-              </React.Fragment>
-            ))}
-
-            {/* Current Active Round */}
-            {phase === 'generating_question' && renderAiBubble('', rounds.length, true)}
-            {!!question && renderAiBubble(question, rounds.length, true)}
-
-            {/* Transcribing live candidate recording */}
-            {phase === 'transcribing' && renderCandidateCard('Turning your words into text...', rounds.length, true)}
-          </ScrollView>
-
-          {/* Floating Atmospheric Footer Bar (matching Image 8_108.png) */}
-          <View style={styles.floatingFooter}>
-            <LinearGradient
-              pointerEvents="none"
-              colors={['transparent', 'rgba(7,5,4,0.92)', '#000']}
-              style={StyleSheet.absoluteFill}
-            />
-
-            <View style={styles.footerInner}>
-              {/* Status Subheader */}
-              <View style={styles.statusSubheaderRow}>
-                <Text accessibilityLiveRegion="polite" style={styles.statusSubheaderText}>
-                  {error ? 'Something went wrong' : paused ? 'Recording paused' : phaseLabels[phase]}
-                  {phase === 'recording' ? ` · ${formatTime(seconds)}` : ''}
+          <View style={styles.chatContainer}>
+            <ScrollView
+              ref={log}
+              style={styles.chatScrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.chatScrollContent}
+              onContentSizeChange={() => log.current?.scrollToEnd({ animated: !reduced })}
+            >
+              {/* Candidate Initial Topic Prompt (Right Aligned Sunset Orange Bubble) */}
+              <View style={styles.topicRow}>
+                <LinearGradient colors={['#FF6F26', '#FF500B', '#DE3400']} style={styles.topicBubble}>
+                  <Text style={styles.topicText}>{topic}</Text>
+                </LinearGradient>
+                <Text style={styles.topicTimestamp}>
+                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
-                {!error && !paused && phase !== 'idle' && phase !== 'done' && <LiveDots active />}
               </View>
 
-              {/* Centered Spoken Query Display / Topic / Editable Answer */}
-              {error ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
-                  <MotionPressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      if (retry.current) void perform(retry.current);
-                      else setError('');
-                    }}
-                  >
-                    <Text style={styles.retryText}>{retry.current ? 'Try again' : 'Dismiss'}</Text>
-                  </MotionPressable>
+              {/* Completed Interview Rounds */}
+              {rounds.map((round, idx) => (
+                <React.Fragment key={idx}>
+                  {renderAiBubble(round.question, idx)}
+                  {renderCandidateCard(round.answer, idx)}
+                </React.Fragment>
+              ))}
+
+              {/* Current Active Round */}
+              {phase === 'generating_question' && renderAiBubble('', rounds.length, true)}
+              {!!question && renderAiBubble(question, rounds.length, true)}
+
+              {/* Transcribing live candidate recording */}
+              {phase === 'transcribing' && renderCandidateCard('Turning your words into text...', rounds.length, true)}
+            </ScrollView>
+
+            {/* Anchored Atmospheric Speaker Panel (Physical layout below chat - NEVER overlaps cards) */}
+            <View style={styles.anchoredSpeakerFooter}>
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(28,14,8,0.98)', '#100704', '#080302']}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.footerSeparatorGlow} />
+
+              <View style={styles.footerInner}>
+                {/* Status Subheader */}
+                <View style={styles.statusSubheaderRow}>
+                  <Text accessibilityLiveRegion="polite" style={styles.statusSubheaderText}>
+                    {error ? 'Something went wrong' : paused ? 'Recording paused' : phaseLabels[phase]}
+                    {phase === 'recording' ? ` · ${formatTime(seconds)}` : ''}
+                  </Text>
+                  {!error && !paused && phase !== 'idle' && phase !== 'done' && <LiveDots active />}
                 </View>
-              ) : phase === 'idle' ? (
-                <TextInput
-                  accessibilityLabel="Type your answer"
-                  multiline
-                  value={answer}
-                  onChangeText={setAnswer}
-                  placeholder="Type an answer or tap the mic to speak."
-                  placeholderTextColor="#FFF"
-                  style={styles.spokenQueryInput}
-                />
-              ) : (
-                <Text style={styles.spokenQueryText}>
-                  {phase === 'recording'
-                    ? paused
-                      ? 'Recording paused. Tap resume to speak.'
-                      : 'Speak freely. Tap send when you’re ready.'
-                    : question || topic}
-                </Text>
-              )}
 
-              {/* Action Controls Row */}
-              <View style={styles.actionControlsRow}>
-                <GlassButton
-                  label={paused ? 'Resume recording' : 'Pause recording'}
-                  onPress={pause}
-                  disabled={phase !== 'recording'}
-                  style={styles.sideCircleButton}
-                >
-                  <View style={styles.pauseBars}>
-                    <View style={styles.pauseBar} />
-                    <View style={styles.pauseBar} />
+                {/* Centered Spoken Query Display / Word-by-word Progressive Highlight / Editable Answer */}
+                {error ? (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <MotionPressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        if (retry.current) void perform(retry.current);
+                        else setError('');
+                      }}
+                    >
+                      <Text style={styles.retryText}>{retry.current ? 'Try again' : 'Dismiss'}</Text>
+                    </MotionPressable>
                   </View>
-                </GlassButton>
+                ) : phase === 'idle' ? (
+                  <TextInput
+                    accessibilityLabel="Type your answer"
+                    multiline
+                    value={answer}
+                    onChangeText={setAnswer}
+                    placeholder="Type an answer or tap the mic to speak."
+                    placeholderTextColor="#A1A1AA"
+                    style={styles.spokenQueryInput}
+                  />
+                ) : (
+                  <ProgressiveSpokenText
+                    text={
+                      phase === 'recording'
+                        ? paused
+                          ? 'Recording paused. Tap resume to speak.'
+                          : 'Speak freely. Tap send when you’re ready.'
+                        : question || topic
+                    }
+                    progress={playProgress}
+                    active={phase === 'speaking'}
+                    style={styles.spokenQueryText}
+                  />
+                )}
 
-                <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
+                {/* Action Controls Row */}
+                <View style={styles.actionControlsRow}>
+                  <GlassButton
+                    label={paused ? 'Resume recording' : 'Pause recording'}
+                    onPress={pause}
+                    disabled={phase !== 'recording' && phase !== 'speaking'}
+                    style={styles.sideCircleButton}
+                  >
+                    {paused ? (
+                      <DesignIcon name="play" />
+                    ) : (
+                      <View style={styles.pauseBars}>
+                        <View style={styles.pauseBar} />
+                        <View style={styles.pauseBar} />
+                      </View>
+                    )}
+                  </GlassButton>
 
-                <GlassButton
-                  label="Submit answer"
-                  onPress={send}
-                  disabled={!!error || (phase !== 'recording' && !(phase === 'idle' && answer.trim()))}
-                  style={styles.sideCircleButton}
-                >
-                  <View style={{ transform: [{ rotate: '45deg' }] }}>
-                    <DesignIcon name="send" />
-                  </View>
-                </GlassButton>
+                  <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
+
+                  <GlassButton
+                    label="Submit answer"
+                    onPress={send}
+                    disabled={!!error || (phase !== 'recording' && !(phase === 'idle' && answer.trim()))}
+                    style={styles.sideCircleButton}
+                  >
+                    <View style={{ transform: [{ rotate: '45deg' }] }}>
+                      <DesignIcon name="send" />
+                    </View>
+                  </GlassButton>
+                </View>
+
+                {/* iOS Home Indicator */}
+                <View style={styles.homeIndicatorBar} />
               </View>
-
-              {/* iOS Home Indicator */}
-              <View style={styles.homeIndicatorBar} />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -886,11 +940,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
 
-  // Chat Log Scroll
+  chatContainer: {
+    flex: 1,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  chatScrollView: {
+    flex: 1,
+    width: '100%',
+  },
   chatScrollContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 220,
+    paddingBottom: 24,
     gap: 16,
   },
 
@@ -1095,19 +1157,29 @@ const styles = StyleSheet.create({
   },
 
   // Floating Atmospheric Footer Bar
-  floatingFooter: {
+  anchoredSpeakerFooter: {
+    width: '100%',
+    backgroundColor: '#0D0503',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,112,32,0.18)',
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  footerSeparatorGlow: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    paddingTop: 24,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    justifyContent: 'flex-end',
+    height: 1,
+    backgroundColor: 'rgba(255,112,32,0.3)',
   },
   footerInner: {
-    gap: 14,
+    gap: 12,
     alignItems: 'center',
+    width: '100%',
+    maxWidth: 580,
   },
   statusSubheaderRow: {
     flexDirection: 'row',
@@ -1124,12 +1196,13 @@ const styles = StyleSheet.create({
   },
   spokenQueryText: {
     fontFamily: DESIGN.semibold,
-    fontSize: 20,
-    lineHeight: 27,
-    letterSpacing: -0.4,
+    fontSize: 18,
+    lineHeight: 25,
+    letterSpacing: -0.35,
     textAlign: 'center',
     color: '#FFF',
-    minHeight: 54,
+    minHeight: 44,
+    maxHeight: 110,
     paddingHorizontal: 12,
   },
   spokenQueryInput: {

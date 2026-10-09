@@ -1,5 +1,5 @@
-import React, { PropsWithChildren, useState, useId, useEffect, useRef } from 'react';
-import { View, Animated, Easing, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle } from 'react-native';
+import React, { PropsWithChildren, useState, useId, useEffect, useRef, useMemo } from 'react';
+import { View, Text, Animated, Easing, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { Asset } from 'expo-asset';
 import { figmaSvg } from './FigmaSvg';
 import Svg, { Defs, RadialGradient, Stop, Rect, Circle, SvgXml, Path } from 'react-native-svg';
@@ -122,13 +122,14 @@ export function GlowButton({ onPress, disabled, recording, paused, size = 68, ho
   </BreathingHalo>;
 }
 
-const AI_WAVE_HEIGHTS = [8, 14, 20, 16, 8, 20, 24, 12, 16, 20, 10, 16, 24, 12, 8];
-const CANDIDATE_WAVE_HEIGHTS = [6, 12, 16, 20, 12, 16, 20, 10, 12, 16, 20, 8, 12, 12, 6, 12, 16, 8];
+const AI_WAVE_HEIGHTS = [8, 14, 20, 16, 8, 20, 24, 12, 16, 20, 10, 16, 24, 12, 8, 18, 22, 14, 10, 16];
+const CANDIDATE_WAVE_HEIGHTS = [6, 12, 16, 20, 12, 16, 20, 10, 12, 16, 20, 8, 12, 12, 6, 12, 16, 8, 14, 18];
 
 export function Waveform({ candidate = false, active = false, progress = 0 }: { candidate?: boolean; active?: boolean; progress?: number }) {
   const { reduced } = useMotion();
-  const heights = candidate ? CANDIDATE_WAVE_HEIGHTS : AI_WAVE_HEIGHTS;
+  const [containerWidth, setContainerWidth] = useState(0);
   const pulse = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     pulse.setValue(0);
     if (!active || reduced) return;
@@ -139,20 +140,113 @@ export function Waveform({ candidate = false, active = false, progress = 0 }: { 
     animation.start(); return () => animation.stop();
   }, [active, reduced, pulse]);
 
-  const count = heights.length;
-  return <View testID="audio-waveform" accessible={false} style={[styles.wave, { height: 26, gap: candidate ? 4 : 5 }]}>{heights.map((baseH, i) => {
-    const isPlayed = progress > 0 ? (i + 1) / count <= progress : active;
-    const activeColor = '#FB923C';
-    const inactiveColor = candidate ? 'rgba(251,146,60,0.5)' : '#52525B';
-    const barColor = isPlayed ? activeColor : inactiveColor;
-    return <Animated.View key={i} style={{
-      width: 2, height: baseH, borderRadius: 2, backgroundColor: barColor,
-      transform: [{ scaleY: active && !reduced ? pulse.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: i % 3 === 0 ? [0.6, 1.25, 0.8] : i % 3 === 1 ? [1.1, 0.65, 1.2] : [0.8, 1.2, 0.6]
-      }) : 1 }]
-    }} />;
-  })}</View>;
+  const step = candidate ? 6 : 5;
+  const count = containerWidth > 0 ? Math.max(16, Math.floor(containerWidth / step)) : 34;
+  const heights = useMemo(() => {
+    const base = candidate ? CANDIDATE_WAVE_HEIGHTS : AI_WAVE_HEIGHTS;
+    const res: number[] = [];
+    for (let i = 0; i < count; i++) {
+      res.push(base[i % base.length]);
+    }
+    return res;
+  }, [count, candidate]);
+
+  return (
+    <View
+      testID="audio-waveform"
+      accessible={false}
+      onLayout={(e) => {
+        const w = Math.round(e.nativeEvent.layout.width);
+        if (w > 0 && Math.abs(w - containerWidth) > 4) {
+          setContainerWidth(w);
+        }
+      }}
+      style={[
+        styles.wave,
+        {
+          height: 26,
+          width: '100%',
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        },
+      ]}
+    >
+      {heights.map((baseH, i) => {
+        const isPlayed = progress > 0 ? (i + 1) / count <= progress : active;
+        const activeColor = '#FB923C';
+        const inactiveColor = candidate ? 'rgba(251,146,60,0.45)' : '#52525B';
+        const barColor = isPlayed ? activeColor : inactiveColor;
+        return (
+          <Animated.View
+            key={i}
+            style={{
+              width: 2,
+              height: baseH,
+              borderRadius: 2,
+              backgroundColor: barColor,
+              transform: [{
+                scaleY: active && !reduced ? pulse.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: i % 3 === 0 ? [0.6, 1.25, 0.8] : i % 3 === 1 ? [1.1, 0.65, 1.2] : [0.8, 1.2, 0.6]
+                }) : 1
+              }]
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+export function ProgressiveSpokenText({
+  text,
+  progress = 0,
+  active = false,
+  style,
+}: {
+  text: string;
+  progress?: number;
+  active?: boolean;
+  style?: StyleProp<TextStyle>;
+}) {
+  if (!text) return null;
+  if (!active) {
+    return <Text style={style}>{text}</Text>;
+  }
+
+  const tokens = text.split(/(\s+)/);
+  const wordsOnly = tokens.filter((t) => t.trim().length > 0);
+  const totalWords = wordsOnly.length;
+  const currentWordIndex = Math.min(totalWords - 1, Math.floor(progress * totalWords));
+
+  let wordCount = 0;
+  return (
+    <Text style={style}>
+      {tokens.map((token, i) => {
+        if (!token.trim()) {
+          return <Text key={i}>{token}</Text>;
+        }
+        const isSpoken = wordCount <= currentWordIndex;
+        wordCount++;
+        return (
+          <Text
+            key={i}
+            style={{
+              color: isSpoken ? '#FFFFFF' : 'rgba(255, 255, 255, 0.38)',
+              fontWeight: isSpoken ? '700' : '400',
+              textShadowColor: isSpoken ? 'rgba(255, 255, 255, 0.25)' : 'transparent',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: isSpoken ? 3 : 0,
+            }}
+          >
+            {token}
+          </Text>
+        );
+      })}
+    </Text>
+  );
 }
 
 export function TranscriptionIcon({ open = false }: { open?: boolean }) {
