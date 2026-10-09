@@ -29,6 +29,7 @@ export interface InterviewRound {
 }
 
 export interface SavedConversation {
+  isSample?: boolean;
   id: string;
   topic: string;
   createdAt: string;

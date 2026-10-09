@@ -1,5 +1,5 @@
 import React, { createContext, PropsWithChildren, useContext, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, Pressable, PressableProps, StyleProp, ViewStyle, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, Pressable, PressableProps, StyleProp, StyleSheet, ViewStyle, View } from 'react-native';
 
 export const easeOut = Easing.bezier(.23, 1, .32, 1);
 export const easeDrawer = Easing.bezier(.32, .72, 0, 1);
@@ -32,6 +32,13 @@ export function MotionPressable({ children, style, lift = false, disabled, onPre
   const [hover, setHover] = useState(false), [pressed, setPressed] = useState(false), [focus, setFocus] = useState(false);
   const press = useRef(new Animated.Value(0)).current;
   const highlight = useRef(new Animated.Value(0)).current;
+  const shape = (StyleSheet.flatten(style) || {}) as ViewStyle;
+  const radius = shape.borderRadius ?? 0;
+  const tl = shape.borderTopLeftRadius ?? radius;
+  const tr = shape.borderTopRightRadius ?? radius;
+  const bl = shape.borderBottomLeftRadius ?? radius;
+  const br = shape.borderBottomRightRadius ?? radius;
+
   useEffect(() => {
     Animated.timing(press, { toValue: pressed && !disabled ? 1 : 0, duration: reduced ? 0 : 120, easing: easeOut, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [pressed, disabled, reduced, press]);
@@ -41,9 +48,9 @@ export function MotionPressable({ children, style, lift = false, disabled, onPre
   return <AnimatedPressable {...props} disabled={disabled} accessibilityState={{...props.accessibilityState, disabled:!!disabled}}
     onPressIn={e=>{setPressed(true);onPressIn?.(e);}} onPressOut={e=>{setPressed(false);onPressOut?.(e);}}
     onHoverIn={e=>{if(canHover)setHover(true);onHoverIn?.(e);}} onHoverOut={e=>{setHover(false);onHoverOut?.(e);}}
-    onFocus={e=>{setFocus(true);onFocus?.(e);}} onBlur={e=>{setFocus(false);setPressed(false);onBlur?.(e);}}
-    style={[style, { opacity: disabled ? .4 : press.interpolate({inputRange:[0,1],outputRange:[1,.88]}), transform:[{scale:reduced?1:press.interpolate({inputRange:[0,1],outputRange:[1,.96]})},{translateY:lift&&!reduced?highlight.interpolate({inputRange:[0,1],outputRange:[0,-2]}):0}] }, focus && Platform.OS==='web' && ({outline:'2px solid #FFB083',outlineOffset:3} as ViewStyle)]}>
-    <Animated.View pointerEvents="none" style={{position:'absolute',top:0,right:0,bottom:0,left:0,borderRadius:24,backgroundColor:'#FFF',opacity:highlight.interpolate({inputRange:[0,1],outputRange:[0,.07]})}}/>
+    onFocus={e=>{setFocus(Platform.OS!=='web'||!!(e.target as unknown as HTMLElement)?.matches?.(':focus-visible'));onFocus?.(e);}} onBlur={e=>{setFocus(false);setPressed(false);onBlur?.(e);}}
+    style={[style, { opacity: disabled ? .4 : press.interpolate({inputRange:[0,1],outputRange:[1,.88]}), transform:[{scale:reduced?1:press.interpolate({inputRange:[0,1],outputRange:[1,.96]})},{translateY:lift&&!reduced?highlight.interpolate({inputRange:[0,1],outputRange:[0,-2]}):0}] }, focus && Platform.OS==='web' && ({boxShadow:'0 0 0 2px #FFB083'} as ViewStyle)]}>
+    <Animated.View pointerEvents="none" style={{position:'absolute',top:0,right:0,bottom:0,left:0,borderRadius:radius,borderTopLeftRadius:tl,borderTopRightRadius:tr,borderBottomLeftRadius:bl,borderBottomRightRadius:br,backgroundColor:'#FFF',opacity:highlight.interpolate({inputRange:[0,1],outputRange:[0,.07]})}}/>
     {children}
   </AnimatedPressable>;
 }

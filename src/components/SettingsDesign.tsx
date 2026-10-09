@@ -1,5 +1,5 @@
 import React, { PropsWithChildren } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { DESIGN, DesignFrame } from './CoachieDesign';
 import { MotionPressable } from './Motion';
@@ -15,7 +15,7 @@ export function SettingIcon({name, color='#D5CBC5'}:{name:string;color?:string})
   return <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><Path d={paths[name]||paths.info}/>{name==='info'&&<Circle cx={12} cy={12} r={9}/>} {name==='eye'&&<Circle cx={12} cy={12} r={3}/>}</Svg>;
 }
 export function SettingsPage({title,back,children,footer}:{title:string;back:()=>void;children:React.ReactNode;footer?:React.ReactNode}) {
-  return <DesignFrame chat><View style={S.header}><MotionPressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={S.back}><SettingIcon name="back"/></MotionPressable><Text accessibilityRole="header" style={S.headerTitle}>{title}</Text><View style={{width:44}}/></View><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={S.content}>{children}</ScrollView>{footer&&<View style={{paddingHorizontal:24,paddingVertical:16,backgroundColor:'rgba(10,5,3,.92)'}}>{footer}</View>}</DesignFrame>;
+  return <DesignFrame chat><View style={S.header}><MotionPressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={S.back}><SettingIcon name="back"/></MotionPressable><Text accessibilityRole="header" style={S.headerTitle}>{title}</Text><View style={{width:44}}/></View><ScrollView style={{flex:1,minHeight:0,...(Platform.OS==='web'?{scrollbarWidth:'thin',scrollbarColor:'#88563B transparent'}:{})} as any} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator contentContainerStyle={S.content}>{children}</ScrollView>{footer&&<View style={{paddingHorizontal:24,paddingVertical:16,backgroundColor:'rgba(10,5,3,.92)'}}>{footer}</View>}</DesignFrame>;
 }
 export function Group({children}:PropsWithChildren) {return <View style={S.group}>{children}</View>;}
 export function SettingRow({title,detail,icon,onPress,selected,last=false,disabled=false}:{title:string;detail?:string;icon?:string;onPress:()=>void;selected?:boolean;last?:boolean;disabled?:boolean}) {

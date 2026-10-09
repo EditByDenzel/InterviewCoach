@@ -1,6 +1,6 @@
 const mockStorage:Record<string,string>={};
 jest.mock('@react-native-async-storage/async-storage',()=>({getItem:jest.fn(async(key:string)=>mockStorage[key]??null),setItem:jest.fn(async(key:string,value:string)=>{mockStorage[key]=value;})}));
-import {loadConversations,saveConversation} from '../src/store/conversationStore';
+import {loadConversations,loadConversationLibrary,saveConversation} from '../src/store/conversationStore';
 import {SavedConversation} from '../src/types';
 const conversation=(id:string,updatedAt='2026-10-09T12:00:00Z'):SavedConversation=>({id,topic:'Engineering',createdAt:updatedAt,updatedAt,rounds:[],currentQuestion:'How would you design this?',closingMessage:'',status:'in_progress',language:'Thai',voice:'Kore'});
 beforeEach(()=>{for(const key of Object.keys(mockStorage))delete mockStorage[key];});
@@ -18,4 +18,14 @@ it('does not overwrite unreadable history with a new session',async()=>{
  mockStorage['@coachie_conversations_v1']='broken';
  await expect(saveConversation(conversation('new'))).rejects.toThrow('could not be read');
  expect(mockStorage['@coachie_conversations_v1']).toBe('broken');
+});
+it('includes distinct 3, 4 and 5 round samples without modifying saved history',async()=>{
+ await saveConversation(conversation('personal'));
+ const library=await loadConversationLibrary();
+ const samples=library.filter(item=>item.isSample);
+ expect(samples.map(item=>item.rounds.length)).toEqual([3,4,5]);
+ expect(new Set(samples.map(item=>item.id)).size).toBe(3);
+ expect(samples.every(item=>item.rounds.every(round=>!!round.question&&!!round.answer)&&!!item.closingMessage)).toBe(true);
+ expect((await loadConversations()).map(item=>item.id)).toEqual(['personal']);
+ expect((await loadConversationLibrary()).map(item=>item.id)).toEqual(library.map(item=>item.id));
 });

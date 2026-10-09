@@ -4,6 +4,7 @@
 // ============================================================
 
 import React from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from 'react-native-paper';
@@ -35,7 +36,7 @@ export default function AppNavigator() {
             fontWeight: 'bold',
             color: theme.colors.primary,
           },
-          cardStyle: { backgroundColor: theme.colors.background },
+          cardStyle: { backgroundColor: theme.colors.background, ...(Platform.OS === 'web' ? { height: '100%', maxHeight: '100%', minHeight: 0, overflow: 'hidden' } : {}) },
           headerShadowVisible: false,
           headerShown: false,
           animationEnabled: !reduced,

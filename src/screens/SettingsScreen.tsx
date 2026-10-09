@@ -5,7 +5,7 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, AppSettings } from '../types';
 import { loadSettings, updateSettings } from '../store/settingsStore';
 import { SettingsPage, SettingRow, SettingIcon, Group, Action, S } from '../components/SettingsDesign';
-import { Orb } from '../components/CoachieDesign';
+import { Orb, ProfileIcon } from '../components/CoachieDesign';
 import { MotionPressable } from '../components/Motion';
 import app from '../../app.json';
 
@@ -16,7 +16,7 @@ export default function SettingsScreen({navigation}:Props) {
  const [settings,setSettings]=useState<AppSettings|null>(null);
  useFocusEffect(useCallback(()=>{let active=true;void loadSettings().then(s=>{if(active)setSettings(s);});return()=>{active=false;};},[]));
  return <SettingsPage title="Settings" back={()=>navigation.goBack()}>
-  <Group><View style={{padding:20,flexDirection:'row',gap:16,alignItems:'center'}}><View style={{width:48,height:48,borderRadius:24,backgroundColor:'rgba(255,92,28,.16)',alignItems:'center',justifyContent:'center'}}><Orb/></View><View style={{flex:1}}><Text style={S.title}>Your Coachie</Text><Text style={S.detail}>Make every conversation yours.</Text></View></View></Group>
+  <Group><View style={{padding:20,flexDirection:'row',gap:16,alignItems:'center'}}><View style={{width:48,height:48,borderRadius:24,backgroundColor:'rgba(255,92,28,.16)',borderWidth:1,borderColor:'rgba(255,180,120,.3)',alignItems:'center',justifyContent:'center'}}><ProfileIcon size={26} color="#FF9036"/></View><View style={{flex:1}}><Text style={S.title}>Your Coachie</Text><Text style={S.detail}>Make every conversation yours.</Text></View></View></Group>
   <View><Text style={S.label}>INTERVIEW PREFERENCES</Text><Group><SettingRow icon="language" title="Language" detail={settings?.language||'English'} onPress={()=>navigation.navigate('Preferences',{page:'language'})}/><SettingRow icon="voice" title="Voice" detail={settings?.ttsProvider==='elevenlabs'?'ElevenLabs':`Gemini · ${settings?.geminiVoice||'Kore'}`} last onPress={()=>navigation.navigate('Preferences',{page:'voice'})}/></Group></View>
   <View><Text style={S.label}>APP & CONNECTIONS</Text><Group><SettingRow icon="key" title="API keys" detail={settings?.geminiApiKey?'Gemini connected':'Add a key to get started'} onPress={()=>navigation.navigate('Preferences',{page:'keys'})}/><SettingRow icon="info" title="About Coachie" detail={`Version ${app.expo.version}`} last onPress={()=>navigation.navigate('Preferences',{page:'about'})}/></Group></View>
   <Text style={S.body}>Your preferences apply to the next interview. The app interface stays in English.</Text>

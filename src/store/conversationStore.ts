@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SavedConversation } from '../types';
+import { sampleConversations } from './sampleConversations';
 
 const KEY = '@coachie_conversations_v1';
 let queue: Promise<void> = Promise.resolve();
@@ -25,3 +26,10 @@ export function saveConversation(conversation:SavedConversation):Promise<void> {
 }
 
 export function createConversationId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`; }
+
+/** Samples are bundled, clearly labeled, and never written over personal history. */
+export async function loadConversationLibrary(): Promise<SavedConversation[]> {
+  const saved = await loadConversations();
+  return [...saved, ...sampleConversations.filter(sample => !saved.some(item => item.id === sample.id))];
+}
+

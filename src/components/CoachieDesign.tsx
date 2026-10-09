@@ -48,6 +48,13 @@ export function DesignIcon({ name }: { name: keyof typeof icons }) {
   return Platform.OS === 'web' ? <Image source={{uri}} style={{width,height}} /> : <SvgXml xml={figmaSvg[name]} />;
 }
 
+export function ProfileIcon({ size = 22, color = '#FFF' }: { size?: number; color?: string }) {
+  return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="7.5" r="4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M4.5 19.5c0-3.6 3.4-6.5 7.5-6.5s7.5 2.9 7.5 6.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>;
+}
+
 export function DesignFrame({ children, chat = false }: PropsWithChildren<{ chat?: boolean }>) {
   const window = useWindowDimensions();
   const backdropId = `backdrop${useId().replace(/:/g,'')}`;
