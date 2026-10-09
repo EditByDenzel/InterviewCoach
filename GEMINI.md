@@ -24,3 +24,4 @@ InterviewCoach is an AI-powered voice interview screening coach built with:
    WAV. Keep text/transcription requests on generateContent. See PROJECT_CONTEXT.
    Thai uses Flash TTS and its studio voices; Flash-Lite does not support Thai.
 3. **Tests**: Always run `npm test` before committing changes.
+4. **Changelog**: Always update CHANGELOG.md whenever making changes or additions to the codebase.

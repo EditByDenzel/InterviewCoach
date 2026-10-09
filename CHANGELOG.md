@@ -8,6 +8,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Polish, In-App Drawer, Reactive Audio & Telegram Controls — 2026-10-10
+- **In-App Sidebar Drawer**: Confined the conversation sidebar overlay strictly within `DesignFrame` as an absolute in-frame overlay rather than a root browser modal. On desktop web, the drawer and dim backdrop animate strictly within the phone mockup rather than detaching to the browser edge.
+- **Delete Conversations**: Added chat deletion in `ConversationSidebar` with two-tap confirmation (`Delete?`) and persistent tracking of deleted sample chats in `@coachie_deleted_samples_v1` so deleted chats never resurface. Added delete conversation action and modal dialog in `ConversationScreen`.
+- **Voice-Frequency Reactive Mic Halo**: Integrated Web Audio API `analyser` (web) and audio status metering (native) into `BreathingHalo` to dynamically scale (`1.0 + level * 0.35`) and boost aura glow in real-time based on speech volume and frequency instead of an idle loop.
+- **Telegram-Style Transcription Button**: Redesigned `TranscriptionIcon` into a clean rounded badge with crisp `→A` matching Telegram's voice-note UX without squashing inside circle borders.
+- **Balanced Waveform Layout**: Adjusted candidate waveform spacing (`step = 7`, right margin) so audio bars span evenly without bunching or clipping against action controls.
+- **Atmospheric Feathered Footer Fade**: Replaced the abrupt top blur boundary in `anchoredSpeakerFooter` with an upward feathered gradient fade (`top: -36`), dissolving chat messages smoothly into obsidian darkness without harsh lines or strokes.
+- **Quick Settings Modal Sizing**: Constrained `quickSettingsCard` `maxWidth` to `348` (`width: '90%'`) so the voice and language sheet sits comfortably with breathing room inside the 390px mobile frame.
+- **Removed Duplicate UX Pause Phrasing**: Fixed double pause wording; status subheader displays `Paused · MM:SS` while bottom caption displays `Tap resume to continue speaking.` without repeating phrases.
+- **Direct Question Starts**: Added system instructions and regex sanitization in `geminiService.ts` ensuring the AI never starts interviews with opening pleasantries ("Hello", "Welcome", etc.), beginning immediately with the first interview question.
+- **Dynamic Duration & Loaders**: Eliminated hardcoded fallback durations (`00:24`, `00:18`); replaced with dynamic word-count calculations, live playback progress, and loading indicators.
+- **Desktop Horizontal Drag-to-Scroll**: Enabled mouse click-and-drag horizontal scrolling on Home suggestion cards with `grab` / `grabbing` cursors.
+- **Persistent Aira Drafting Pill**: Maintained `[Orb] Aira · Synthetic Voice` header permanently above every AI message card post-generation.
+
+
 ### Fluid conversations and saved history
 - Replaced the large Home CTA with a multiline composer, inline send, keyboard
   submission, animated height, long-word wrapping, and hidden scrollbar chrome.
