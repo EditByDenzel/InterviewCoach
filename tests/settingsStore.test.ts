@@ -10,7 +10,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   }),
 }));
 
-import { loadSettings, saveSettings, getGeminiApiKey, getTTSProvider } from '../src/store/settingsStore';
+import { loadSettings, saveSettings, updateSettings, getGeminiApiKey, getTTSProvider } from '../src/store/settingsStore';
 
 describe('Settings Store', () => {
   beforeEach(() => {
@@ -26,7 +26,18 @@ describe('Settings Store', () => {
       geminiApiKey: '',
       elevenLabsApiKey: '',
       ttsProvider: 'gemini',
+      language: 'English',
+      geminiVoice: 'Kore',
+      elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
     });
+  });
+
+  it('migrates old settings and preserves keys across preference page saves', async () => {
+    await saveSettings({geminiApiKey:'existing-key',elevenLabsApiKey:'existing-eleven',ttsProvider:'gemini'});
+    expect((await loadSettings()).language).toBe('English');
+    await updateSettings({language:'French'});
+    await updateSettings({geminiVoice:'Puck'});
+    expect(await loadSettings()).toMatchObject({geminiApiKey:'existing-key',elevenLabsApiKey:'existing-eleven',language:'French',geminiVoice:'Puck'});
   });
 
   it('saves and reloads user settings correctly', async () => {

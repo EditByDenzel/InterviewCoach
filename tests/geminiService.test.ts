@@ -34,6 +34,7 @@ describe('Gemini Service', () => {
         'React Native Engineer',
         [],
         'Start the interview.',
+        'French',
       );
 
       expect(result).toBe('Tell me about a challenging project you built.');
@@ -44,6 +45,7 @@ describe('Gemini Service', () => {
 
       const body = JSON.parse(calledOptions.body);
       expect(body.systemInstruction.parts[0].text).toContain('React Native Engineer');
+      expect(body.systemInstruction.parts[0].text).toContain('in French');
       expect(body.contents).toHaveLength(1);
       expect(body.contents[0].parts[0].text).toBe('Start the interview.');
     });
@@ -86,7 +88,7 @@ describe('Gemini Service', () => {
         json: async () => mockResponse,
       } as any);
 
-      const result = await generateGeminiTTS('mock-api-key', 'Hello world');
+      const result = await generateGeminiTTS('mock-api-key', 'Hello world', 'Puck');
 
       expect(result).toBe(mockBase64);
       const [calledUrl, calledOptions] = (global.fetch as jest.Mock).mock.calls[0];
@@ -94,7 +96,7 @@ describe('Gemini Service', () => {
 
       const body = JSON.parse(calledOptions.body);
       expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
-      expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Kore');
+      expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Puck');
     });
   });
 

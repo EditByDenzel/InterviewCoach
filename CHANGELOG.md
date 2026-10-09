@@ -8,6 +8,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Coachie design refresh
+- Rebuilt Home and the five-round interview around the selected Figma screens.
+- Added an explicit Start conversation button and consistent gradients within home cards.
+- Added grouped Settings with Language, Voice, API Keys, and About subpages.
+- Language and voice preferences feed the actual interview/TTS requests. Existing keys migrate intact.
+- Restyled the summary, retained the transcript, and kept sharing and starting another session.
+- Added recording pause/resume, mute, cached question replay, and recovery controls.
+- Removed duplicate root registration: Expo/AppEntry already registers the app.
+- Aligned screens, safe-area-context, and reanimated with Expo SDK 51 to fix native codegen.
+- Verified 11 unit tests, TypeScript, web/Android/iOS bundle export, and a five-round browser fixture. Real-device audio and live provider access remain unverified.
+
 ### Fixed
 - Fixed navigation types: Replaced `@react-navigation/native-stack` imports with `@react-navigation/stack`'s `StackScreenProps` and configured `headerLeft: () => null` in `AppNavigator.tsx`. TypeScript (`tsc --noEmit`) now compiles with zero errors.
 - Added Expo entrypoint registration `registerRootComponent(App)` in `App.tsx` and updated `package.json` main field to `node_modules/expo/AppEntry.js`.

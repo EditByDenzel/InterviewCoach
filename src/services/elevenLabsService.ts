@@ -4,6 +4,7 @@
 // ============================================================
 
 const ELEVEN_BASE = 'https://api.elevenlabs.io/v1/text-to-speech';
+import { designPreviewEnabled } from '../dev/designPreview';
 
 /** Default voice: Rachel (natural female) */
 const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
@@ -21,6 +22,7 @@ export async function generateElevenLabsTTS(
   text: string,
   voiceId: string = DEFAULT_VOICE_ID,
 ): Promise<string> {
+  if (designPreviewEnabled) throw new Error('This design demo supports Gemini voices only. Use the normal app to test ElevenLabs.');
   const url = `${ELEVEN_BASE}/${voiceId}`;
 
   const body = {

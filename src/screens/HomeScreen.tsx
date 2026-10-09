@@ -1,293 +1,64 @@
-// ============================================================
-// src/screens/HomeScreen.tsx
-// MD3-styled landing screen using React Native Paper + NativeWind
-// ============================================================
-
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, Alert, StyleSheet } from 'react-native';
-import {
-  Text,
-  Surface,
-  Button,
-  TextInput,
-  Chip,
-  useTheme,
-} from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
 import { loadSettings } from '../store/settingsStore';
-import { COLORS } from '../theme';
+import { DesignFrame, DesignIcon, GlassButton, DESIGN } from '../components/CoachieDesign';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = StackScreenProps<RootStackParamList, 'Home'>;
-
-/** Quick-pick topic suggestions */
-const TOPIC_SUGGESTIONS = [
-  'React Native Developer',
-  'Full-Stack Engineer',
-  'Product Manager',
-  'Data Scientist',
-  'DevOps Engineer',
-  'UX Designer',
-  'ML Engineer',
-  'Backend Developer',
+const suggestions = [
+  { label: 'Mock Interview\nPrep Session', topic: 'Mock Interview Prep Session', icon: 'interview' as const },
+  { label: 'System\nArchitecture\nReview', topic: 'System Architecture Review', icon: 'architecture' as const },
+  { label: 'Behavioral STAR\nFramework', topic: 'Behavioral STAR Framework', icon: 'architecture' as const },
 ];
 
-export default function HomeScreen({ navigation }: Props) {
-  const theme = useTheme();
+export default function HomeScreen({navigation}: Props) {
   const [topic, setTopic] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
-
-  // Check API key on mount + screen focus
-  useEffect(() => {
-    const check = async () => {
-      const settings = await loadSettings();
-      setHasApiKey(!!settings.geminiApiKey);
-    };
-    check();
-    const unsub = navigation.addListener('focus', check);
-    return unsub;
-  }, [navigation]);
-
-  const handleStart = () => {
-    const trimmed = topic.trim();
-    if (!trimmed) {
-      Alert.alert('Topic Required', 'Please enter an interview topic to continue.');
-      return;
-    }
-    if (!hasApiKey) {
-      Alert.alert(
-        'API Key Missing',
-        'Please add your Gemini API key in Settings before starting.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
-        ],
-      );
-      return;
-    }
-    navigation.navigate('Interview', { topic: trimmed });
+  const [validation, setValidation] = useState('');
+  useEffect(()=>{
+    let active = true;
+    const check = async()=>{ const settings = await loadSettings(); if(active) setHasApiKey(!!settings.geminiApiKey); };
+    void check(); const unsub = navigation.addListener('focus',check);
+    return ()=>{active=false;unsub();};
+  },[navigation]);
+  const start = ()=>{
+    if(!topic.trim()) {setValidation('Enter a topic or choose a prompt above.');return;}
+    if(!hasApiKey) {setValidation('Add your Gemini API key in Settings to begin.');return;}
+    navigation.navigate('Interview',{topic:topic.trim()});
   };
-
-  return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Hero section */}
-        <View style={styles.hero}>
-          <Text variant="displaySmall" style={[styles.heroEmoji]}>
-            🎙️
-          </Text>
-          <Text
-            variant="headlineLarge"
-            style={[styles.heroTitle, { color: theme.colors.primary }]}
-          >
-            Interview Coach
-          </Text>
-          <Text
-            variant="bodyLarge"
-            style={[styles.heroSubtitle, { color: theme.colors.onSurfaceVariant }]}
-          >
-            AI-powered mock interview practice
-          </Text>
+  return <DesignFrame>
+    <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS==='ios' ? 'padding' : undefined}>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.brand}><View style={styles.logo}><DesignIcon name="logo" /></View><View><Text style={styles.brandName}>Coachie,</Text><Text style={styles.welcome}>Welcome back</Text></View></View>
+          <GlassButton label="Open Settings" onPress={()=>navigation.navigate('Settings')} style={styles.menu}><DesignIcon name="menu" /></GlassButton>
         </View>
-
-        {/* API key warning */}
-        {!hasApiKey && (
-          <Surface style={[styles.warningCard, { borderColor: COLORS.warning }]} elevation={1}>
-            <Text
-              variant="bodyMedium"
-              style={{ color: COLORS.warning, textAlign: 'center' }}
-              onPress={() => navigation.navigate('Settings')}
-            >
-              ⚠️  No API key configured. Tap to open Settings →
-            </Text>
-          </Surface>
-        )}
-
-        {/* Topic input card */}
-        <Surface style={styles.card} elevation={2}>
-          <Text
-            variant="titleMedium"
-            style={[styles.cardTitle, { color: theme.colors.primary }]}
-          >
-            Interview Topic / Role
-          </Text>
-          <TextInput
-            mode="outlined"
-            label="e.g. React Native Developer"
-            value={topic}
-            onChangeText={setTopic}
-            returnKeyType="done"
-            onSubmitEditing={handleStart}
-            autoCorrect={false}
-            style={styles.textInput}
-            outlineColor={theme.colors.outline}
-            activeOutlineColor={theme.colors.primary}
-            textColor={theme.colors.onSurface}
-          />
-
-          <Text
-            variant="labelSmall"
-            style={[styles.suggestLabel, { color: theme.colors.onSurfaceVariant }]}
-          >
-            Quick picks:
-          </Text>
-          <View style={styles.chipRow}>
-            {TOPIC_SUGGESTIONS.map((s) => (
-              <Chip
-                key={s}
-                onPress={() => setTopic(s)}
-                style={[
-                  styles.chip,
-                  topic === s && { backgroundColor: theme.colors.primaryContainer },
-                ]}
-                textStyle={{ color: topic === s ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }}
-                compact
-              >
-                {s}
-              </Chip>
-            ))}
-          </View>
-        </Surface>
-
-        {/* How it works card */}
-        <Surface style={styles.card} elevation={1}>
-          <Text
-            variant="titleMedium"
-            style={[styles.cardTitle, { color: theme.colors.onSurface }]}
-          >
-            How It Works
-          </Text>
-          {[
-            '🤖  AI asks you 5 realistic interview questions',
-            '🎙️  Speak your answer aloud after each one',
-            '📝  Your answer is transcribed automatically',
-            '💡  AI uses your answers to shape follow-ups',
-            '✅  Get a constructive closing summary',
-          ].map((item) => (
-            <Text
-              key={item}
-              variant="bodyMedium"
-              style={[styles.howItem, { color: theme.colors.onSurfaceVariant }]}
-            >
-              {item}
-            </Text>
-          ))}
-        </Surface>
-
-        {/* Start button */}
-        <Button
-          mode="contained"
-          onPress={handleStart}
-          disabled={!topic.trim()}
-          contentStyle={styles.startButtonContent}
-          labelStyle={styles.startButtonLabel}
-          style={styles.startButton}
-          icon="play-circle"
-        >
-          Start Interview
-        </Button>
-
-        {/* Settings link */}
-        <Button
-          mode="text"
-          onPress={() => navigation.navigate('Settings')}
-          icon="cog"
-          textColor={theme.colors.onSurfaceVariant}
-          style={styles.settingsBtn}
-        >
-          Settings & API Keys
-        </Button>
+        <View style={styles.hero}><Text style={styles.title}>Start a{'\n'}conversation here.</Text></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards} style={styles.cardScroll}>
+          {suggestions.map(item=><Pressable key={item.topic} accessibilityRole="button" accessibilityLabel={item.topic} accessibilityState={{selected:topic===item.topic}} onPress={()=>{setTopic(item.topic);setValidation('');}} style={({pressed})=>[styles.card,topic===item.topic&&styles.selected,{opacity:pressed ? .75 : 1}]}>
+            <LinearGradient pointerEvents="none" colors={topic===item.topic?['#623017','#28130C']:['#44271A','#20130E']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
+            <DesignIcon name={item.icon}/><Text style={styles.cardLabel}>{item.label}</Text>
+          </Pressable>)}
+        </ScrollView>
+        <View style={styles.promptArea}>
+          <TextInput accessibilityLabel="Interview topic" placeholder="Type in your topic here to begin." placeholderTextColor="rgba(255,255,255,.6)" value={topic} onChangeText={value=>{setTopic(value);setValidation('');}} multiline maxLength={1000} style={styles.input} />
+          {!!validation && <Pressable accessibilityRole="button" onPress={()=>!hasApiKey&&navigation.navigate('Settings')}><Text accessibilityLiveRegion="polite" style={styles.validation}>{validation}</Text></Pressable>}
+        </View>
+        <Pressable accessibilityRole="button" onPress={start} style={({pressed})=>[styles.start,{opacity:pressed?.85:1,transform:[{scale:pressed?.96:1}]}]}><LinearGradient pointerEvents="none" colors={['#FFA742','#FF6220']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/><Text style={styles.startText}>Start conversation</Text><View style={{transform:[{rotate:'45deg'}]}}><DesignIcon name="send"/></View></Pressable>
+        <View style={styles.toolbar}>
+          <GlassButton label="AI model and API settings" onPress={()=>navigation.navigate('Settings')} style={styles.model}><Text style={styles.modelText}>Gemini 3.8 Flash</Text><View style={styles.chevron}><DesignIcon name="chevron" /></View></GlassButton>
+        </View>
       </ScrollView>
-    </SafeAreaView>
-  );
+    </KeyboardAvoidingView>
+  </DesignFrame>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scroll: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  hero: {
-    alignItems: 'center',
-    marginBottom: 24,
-    marginTop: 12,
-  },
-  heroEmoji: {
-    fontSize: 56,
-    marginBottom: 8,
-  },
-  heroTitle: {
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  heroSubtitle: {
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  warningCard: {
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    backgroundColor: '#2D1800',
-  },
-  card: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 14,
-    backgroundColor: COLORS.surface,
-  },
-  cardTitle: {
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  textInput: {
-    backgroundColor: COLORS.surfaceElevated,
-    fontSize: 15,
-  },
-  suggestLabel: {
-    marginTop: 14,
-    marginBottom: 8,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    backgroundColor: COLORS.surfaceElevated,
-  },
-  howItem: {
-    marginBottom: 6,
-    lineHeight: 22,
-  },
-  startButton: {
-    borderRadius: 14,
-    marginBottom: 10,
-    backgroundColor: COLORS.accent,
-  },
-  startButtonContent: {
-    paddingVertical: 8,
-  },
-  startButtonLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-    color: '#0F172A',
-  },
-  settingsBtn: {
-    alignSelf: 'center',
-  },
+const styles=StyleSheet.create({
+  fill:{flex:1},content:{flexGrow:1,paddingHorizontal:24,paddingTop:16,paddingBottom:8,justifyContent:'space-between',minHeight:740},
+  header:{height:44,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},brand:{flexDirection:'row',alignItems:'center',gap:12},logo:{width:40,height:40,borderRadius:20,backgroundColor:'rgba(0,0,0,.4)',borderWidth:1,borderColor:'rgba(255,255,255,.2)',alignItems:'center',justifyContent:'center'},brandName:{fontSize:14.5,fontWeight:'700',color:'#FFF',letterSpacing:-.36},welcome:{fontSize:12.5,color:'rgba(255,255,255,.6)',lineHeight:16},menu:{width:44,height:44,backgroundColor:'rgba(30,12,6,.35)',borderColor:'rgba(255,150,80,.18)'},
+  hero:{paddingTop:96,paddingBottom:16},title:{fontSize:38,lineHeight:41,fontWeight:'700',letterSpacing:-1.14,color:'#FFF',fontFamily:Platform.OS==='web'?'Arial':undefined},
+  cardScroll:{flexGrow:0,marginVertical:20,marginRight:-24},cards:{paddingVertical:8,paddingRight:24,gap:12},card:{width:148,height:122,padding:15,borderRadius:22,overflow:'hidden',borderWidth:1,borderColor:'rgba(255,180,120,.18)',justifyContent:'space-between'},selected:{borderColor:'#FFAA72'},cardLabel:{fontSize:13,lineHeight:18,fontWeight:'700',letterSpacing:-.325,color:'rgba(255,255,255,.9)'},
+  start:{marginTop:16,minHeight:54,borderRadius:27,overflow:'hidden',flexDirection:'row',gap:12,alignItems:'center',justifyContent:'center',padding:16},startText:{fontFamily:DESIGN.semibold,fontSize:16,color:'#311105'},
+  promptArea:{paddingTop:12},input:{height:106,padding:17,paddingTop:17,textAlignVertical:'top',fontSize:16,lineHeight:24,color:'#FFF',backgroundColor:'rgba(25,9,5,.4)',borderWidth:1,borderColor:'rgba(255,120,50,.15)',borderRadius:26},validation:{fontSize:12,lineHeight:18,color:'#FFD7AA',paddingTop:8},toolbar:{paddingTop:16,paddingBottom:16,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},model:{height:42,paddingHorizontal:15,backgroundColor:'rgba(30,12,6,.35)',borderColor:'rgba(255,150,80,.18)'},modelText:{fontSize:13.5,color:'rgba(255,255,255,.9)',letterSpacing:-.337},chevron:{marginLeft:2},
 });

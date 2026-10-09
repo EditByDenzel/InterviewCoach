@@ -1,271 +1,50 @@
-// ============================================================
-// src/screens/SettingsScreen.tsx
-// MD3-styled settings with React Native Paper components
-// ============================================================
-
-import React, { useState, useEffect } from 'react';
-import { View, ScrollView, Alert, StyleSheet } from 'react-native';
-import {
-  Text,
-  Surface,
-  Button,
-  TextInput,
-  ActivityIndicator,
-  useTheme,
-  SegmentedButtons,
-} from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useState } from 'react';
+import { View, Text, TextInput, Pressable } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
-import { RootStackParamList, AppSettings, TTSProvider } from '../types';
-import { loadSettings, saveSettings } from '../store/settingsStore';
-import { COLORS } from '../theme';
+import { RootStackParamList, AppSettings } from '../types';
+import { loadSettings, updateSettings } from '../store/settingsStore';
+import { SettingsPage, SettingRow, SettingIcon, Group, Action, S } from '../components/SettingsDesign';
+import { Orb } from '../components/CoachieDesign';
+import app from '../../app.json';
 
-type Props = StackScreenProps<RootStackParamList, 'Settings'>;
-
-export default function SettingsScreen({ navigation }: Props) {
-  const theme = useTheme();
-  const [geminiKey, setGeminiKey] = useState('');
-  const [elevenLabsKey, setElevenLabsKey] = useState('');
-  const [ttsProvider, setTTSProvider] = useState<TTSProvider>('gemini');
-  const [saving, setSaving] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [showGemini, setShowGemini] = useState(false);
-  const [showElevenLabs, setShowElevenLabs] = useState(false);
-
-  useEffect(() => {
-    loadSettings().then((s) => {
-      setGeminiKey(s.geminiApiKey);
-      setElevenLabsKey(s.elevenLabsApiKey);
-      setTTSProvider(s.ttsProvider);
-      setLoaded(true);
-    });
-  }, []);
-
-  const handleSave = async () => {
-    if (!geminiKey.trim()) {
-      Alert.alert('Required', 'Gemini API key is required to use InterviewCoach.');
-      return;
-    }
-    if (ttsProvider === 'elevenlabs' && !elevenLabsKey.trim()) {
-      Alert.alert(
-        'ElevenLabs Key Missing',
-        'You selected ElevenLabs TTS but haven\'t entered an API key.',
-      );
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const settings: AppSettings = {
-        geminiApiKey: geminiKey.trim(),
-        elevenLabsApiKey: elevenLabsKey.trim(),
-        ttsProvider,
-      };
-      await saveSettings(settings);
-      Alert.alert('Saved ✓', 'Settings saved successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } catch {
-      Alert.alert('Error', 'Failed to save settings. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!loaded) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator animating size="large" color={theme.colors.primary} />
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
-          Loading settings…
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={['bottom']}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Gemini API Key */}
-        <Surface style={styles.card} elevation={2}>
-          <Text variant="titleMedium" style={[styles.cardTitle, { color: theme.colors.primary }]}>
-            🔑  Gemini API Key
-          </Text>
-          <Text variant="bodySmall" style={[styles.desc, { color: theme.colors.onSurfaceVariant }]}>
-            Required for interview questions, transcription, and Gemini TTS.{'\n'}
-            Get yours at{' '}
-            <Text style={{ color: theme.colors.primary }}>aistudio.google.com</Text>
-          </Text>
-          <TextInput
-            mode="outlined"
-            label="Gemini API Key"
-            value={geminiKey}
-            onChangeText={setGeminiKey}
-            secureTextEntry={!showGemini}
-            autoCorrect={false}
-            autoCapitalize="none"
-            right={
-              <TextInput.Icon
-                icon={showGemini ? 'eye-off' : 'eye'}
-                onPress={() => setShowGemini((v) => !v)}
-              />
-            }
-            style={styles.textInput}
-            outlineColor={theme.colors.outline}
-            activeOutlineColor={theme.colors.primary}
-            textColor={theme.colors.onSurface}
-            placeholder="AIza..."
-          />
-        </Surface>
-
-        {/* TTS Provider */}
-        <Surface style={styles.card} elevation={2}>
-          <Text variant="titleMedium" style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-            🔊  TTS Provider
-          </Text>
-          <Text variant="bodySmall" style={[styles.desc, { color: theme.colors.onSurfaceVariant }]}>
-            Choose the voice engine for the AI interviewer.
-          </Text>
-          <SegmentedButtons
-            value={ttsProvider}
-            onValueChange={(v) => setTTSProvider(v as TTSProvider)}
-            buttons={[
-              {
-                value: 'gemini',
-                label: 'Gemini TTS',
-                icon: 'google',
-              },
-              {
-                value: 'elevenlabs',
-                label: 'ElevenLabs',
-                icon: 'microphone',
-              },
-            ]}
-            style={styles.segmented}
-          />
-          <Text variant="bodySmall" style={[styles.providerNote, { color: theme.colors.onSurfaceVariant }]}>
-            {ttsProvider === 'gemini'
-              ? '✓ Free with your Gemini API key. Uses the "Kore" voice.'
-              : '✓ High-quality natural voice. Requires an ElevenLabs paid plan.'}
-          </Text>
-        </Surface>
-
-        {/* ElevenLabs API Key */}
-        <Surface style={[styles.card, ttsProvider === 'elevenlabs' && { borderColor: theme.colors.primary, borderWidth: 1 }]} elevation={1}>
-          <Text variant="titleMedium" style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-            🎵  ElevenLabs API Key{' '}
-            <Text style={{ color: theme.colors.onSurfaceVariant, fontWeight: 'normal', fontSize: 13 }}>
-              (optional)
-            </Text>
-          </Text>
-          <Text variant="bodySmall" style={[styles.desc, { color: theme.colors.onSurfaceVariant }]}>
-            Only required when using ElevenLabs as TTS provider.
-          </Text>
-          <TextInput
-            mode="outlined"
-            label="ElevenLabs API Key"
-            value={elevenLabsKey}
-            onChangeText={setElevenLabsKey}
-            secureTextEntry={!showElevenLabs}
-            autoCorrect={false}
-            autoCapitalize="none"
-            right={
-              <TextInput.Icon
-                icon={showElevenLabs ? 'eye-off' : 'eye'}
-                onPress={() => setShowElevenLabs((v) => !v)}
-              />
-            }
-            style={styles.textInput}
-            outlineColor={ttsProvider === 'elevenlabs' ? theme.colors.primary : theme.colors.outline}
-            activeOutlineColor={theme.colors.primary}
-            textColor={theme.colors.onSurface}
-            placeholder="sk_..."
-          />
-        </Surface>
-
-        {/* Save */}
-        <Button
-          mode="contained"
-          onPress={handleSave}
-          disabled={saving}
-          contentStyle={styles.saveContent}
-          labelStyle={styles.saveLabel}
-          style={styles.saveButton}
-          icon={saving ? undefined : 'content-save'}
-          loading={saving}
-        >
-          {saving ? 'Saving…' : 'Save Settings'}
-        </Button>
-
-        {/* Privacy note */}
-        <Surface style={styles.noteCard} elevation={0}>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, lineHeight: 18 }}>
-            🔒  API keys are stored locally on your device only via AsyncStorage.
-            They are never shared with any server other than Google and ElevenLabs.
-          </Text>
-        </Surface>
-      </ScrollView>
-    </SafeAreaView>
-  );
+type Props=StackScreenProps<RootStackParamList,'Settings'>;
+const languages=[['English','English'],['French','Français'],['Spanish','Español'],['Portuguese','Português'],['German','Deutsch'],['Arabic','العربية'],['Hindi','हिन्दी'],['Japanese','日本語']];
+const voices=[['Kore','Firm and composed'],['Puck','Upbeat'],['Charon','Informative'],['Aoede','Breezy'],['Zephyr','Bright'],['Achernar','Soft']];
+export default function SettingsScreen({navigation}:Props) {
+ const [settings,setSettings]=useState<AppSettings|null>(null);
+ useFocusEffect(useCallback(()=>{let active=true;void loadSettings().then(s=>{if(active)setSettings(s);});return()=>{active=false;};},[]));
+ return <SettingsPage title="Settings" back={()=>navigation.goBack()}>
+  <Group><View style={{padding:20,flexDirection:'row',gap:16,alignItems:'center'}}><View style={{width:48,height:48,borderRadius:24,backgroundColor:'rgba(255,92,28,.16)',alignItems:'center',justifyContent:'center'}}><Orb/></View><View style={{flex:1}}><Text style={S.title}>Your Coachie</Text><Text style={S.detail}>Make every conversation yours.</Text></View></View></Group>
+  <View><Text style={S.label}>INTERVIEW PREFERENCES</Text><Group><SettingRow icon="language" title="Language" detail={settings?.language||'English'} onPress={()=>navigation.navigate('Preferences',{page:'language'})}/><SettingRow icon="voice" title="Voice" detail={settings?.ttsProvider==='elevenlabs'?'ElevenLabs':`Gemini · ${settings?.geminiVoice||'Kore'}`} last onPress={()=>navigation.navigate('Preferences',{page:'voice'})}/></Group></View>
+  <View><Text style={S.label}>APP & CONNECTIONS</Text><Group><SettingRow icon="key" title="API keys" detail={settings?.geminiApiKey?'Gemini connected':'Add a key to get started'} onPress={()=>navigation.navigate('Preferences',{page:'keys'})}/><SettingRow icon="info" title="About Coachie" detail={`Version ${app.expo.version}`} last onPress={()=>navigation.navigate('Preferences',{page:'about'})}/></Group></View>
+  <Text style={S.body}>Your preferences apply to the next interview. The app interface stays in English.</Text>
+ </SettingsPage>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scroll: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  card: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 14,
-    backgroundColor: COLORS.surface,
-  },
-  cardTitle: {
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  desc: {
-    lineHeight: 20,
-    marginBottom: 14,
-  },
-  textInput: {
-    backgroundColor: COLORS.surfaceElevated,
-  },
-  segmented: {
-    marginBottom: 10,
-  },
-  providerNote: {
-    fontStyle: 'italic',
-    lineHeight: 18,
-  },
-  saveButton: {
-    borderRadius: 14,
-    marginBottom: 12,
-    backgroundColor: COLORS.accent,
-  },
-  saveContent: { paddingVertical: 8 },
-  saveLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-    color: '#0F172A',
-  },
-  noteCard: {
-    borderRadius: 12,
-    padding: 14,
-    backgroundColor: COLORS.surfaceElevated,
-  },
-});
+export function PreferencesScreen({navigation,route}:StackScreenProps<RootStackParamList,'Preferences'>) {
+ const page=route.params.page;
+ const [settings,setSettings]=useState<AppSettings|null>(null),[saving,setSaving]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
+ const [visible,setVisible]=useState<Record<string,boolean>>({});
+ useFocusEffect(useCallback(()=>{let active=true;void loadSettings().then(s=>{if(active)setSettings(s);});return()=>{active=false;};},[]));
+ const change=(patch:Partial<AppSettings>)=>{setSettings(s=>s?{...s,...patch}:s);setMessage('');setError('');};
+ const save=async()=>{
+  if(!settings)return;
+  if(page==='keys'&&!settings.geminiApiKey.trim()){setError('Enter a Gemini API key to continue.');return;}
+  if((page==='voice'||page==='keys')&&settings.ttsProvider==='elevenlabs'&&!settings.elevenLabsApiKey.trim()){setError('Add an ElevenLabs API key before using this voice engine.');return;}
+  if(page==='voice'&&settings.ttsProvider==='elevenlabs'&&!settings.elevenLabsVoiceId?.trim()){setError('Enter an ElevenLabs voice ID.');return;}
+  setSaving(true);setError('');try {
+   const patch=page==='language'?{language:settings.language}:page==='voice'?{ttsProvider:settings.ttsProvider,geminiVoice:settings.geminiVoice,elevenLabsVoiceId:settings.elevenLabsVoiceId?.trim()}:{geminiApiKey:settings.geminiApiKey.trim(),elevenLabsApiKey:settings.elevenLabsApiKey.trim()};
+   await updateSettings(patch);setMessage('Saved. Ready for your next interview.');
+  }catch{setError('Could not save. Please try again.');}finally{setSaving(false);}
+ };
+ const field=(label:string,key:'geminiApiKey'|'elevenLabsApiKey'|'elevenLabsVoiceId',secret=false)=><View style={{gap:10}}><Text style={S.title}>{label}</Text><View style={{flexDirection:'row',gap:8,alignItems:'center'}}><TextInput accessibilityLabel={label} value={settings?.[key]||''} onChangeText={value=>change({[key]:value})} secureTextEntry={secret&&!visible[key]} autoCapitalize="none" autoCorrect={false} style={S.input}/>{secret&&<Pressable accessibilityRole="button" accessibilityLabel={`${visible[key]?'Hide':'Show'} ${label}`} onPress={()=>setVisible(v=>({...v,[key]:!v[key]}))} style={{width:44,height:44,alignItems:'center',justifyContent:'center'}}><SettingIcon name="eye"/></Pressable>}</View></View>;
+ const titles={language:'Language',voice:'Voice',keys:'API keys',about:'About Coachie'};
+ return <SettingsPage title={titles[page]} back={()=>navigation.goBack()}>
+  {page==='about'?<><View style={{gap:16}}><Orb/><Text style={S.heading}>{'A little practice.\nA lot more confidence.'}</Text><Text style={S.body}>Coachie is your AI interview practice companion. Choose a topic, answer five questions, and leave with feedback you can use.</Text></View><Group><View style={{padding:20,gap:8}}><Text style={S.title}>Coachie {app.expo.version}</Text><Text style={S.body}>Built with Expo and React Native. Questions and transcription use Gemini. Speech uses your selected Gemini or ElevenLabs voice.</Text></View></Group><View style={{gap:10}}><Text style={S.title}>Your data</Text><Text style={S.body}>API keys stay in this app’s local storage, which is not encrypted. Requests go to the provider needed for the feature. Recorded answers are sent to Gemini for transcription. Your session transcript is held in memory; sharing it is your choice.</Text></View></>:!settings?<Text style={S.body}>Loading preferences…</Text>:<>
+  {page==='language'&&<><View style={{gap:8}}><Text style={S.heading}>Speak your language.</Text><Text style={S.body}>Choose the language Coachie uses for questions, spoken responses, and feedback.</Text></View><Group>{languages.map(([value,native],i)=><SettingRow key={value} title={value} detail={native!==value?native:undefined} selected={settings.language===value} last={i===languages.length-1} onPress={()=>change({language:value})}/>)}</Group></>}
+  {page==='voice'&&<><View style={{gap:8}}><Text style={S.heading}>Find your voice.</Text><Text style={S.body}>Choose how your interviewer sounds.</Text></View><View><Text style={S.label}>VOICE ENGINE</Text><Group><SettingRow title="Gemini" detail="Uses your Gemini API key" selected={settings.ttsProvider==='gemini'} onPress={()=>change({ttsProvider:'gemini'})}/><SettingRow title="ElevenLabs" detail="Requires an ElevenLabs API key" selected={settings.ttsProvider==='elevenlabs'} last onPress={()=>change({ttsProvider:'elevenlabs'})}/></Group></View>{settings.ttsProvider==='gemini'?<View><Text style={S.label}>GEMINI VOICE</Text><Group>{voices.map(([name,description],i)=><SettingRow key={name} title={name} detail={description} selected={settings.geminiVoice===name} last={i===voices.length-1} onPress={()=>change({geminiVoice:name})}/>)}</Group></View>:<><Text style={S.body}>Use a voice ID available in your ElevenLabs account. Rachel is the default voice ID.</Text>{field('ElevenLabs voice ID','elevenLabsVoiceId')}<Action secondary title="Manage API keys" onPress={()=>navigation.push('Preferences',{page:'keys'})}/></>}</>}
+  {page==='keys'&&<><View style={{gap:8}}><Text style={S.heading}>Connect your coach.</Text><Text style={S.body}>Gemini powers questions, transcription, and its own voices. ElevenLabs is optional.</Text></View><Group><View style={{padding:16,gap:20}}>{field('Gemini API key','geminiApiKey',true)}{field('ElevenLabs API key','elevenLabsApiKey',true)}</View></Group><Text style={S.body}>Keys are stored locally. Saving a key does not verify provider access; requests use your provider’s account and limits.</Text></>}
+  <Text accessibilityLiveRegion="polite" style={message?S.message:S.error}>{error||message}</Text><Action title={saving?'Saving…':'Save changes'} disabled={saving} onPress={()=>void save()}/>
+  </>}
+ </SettingsPage>;
+}

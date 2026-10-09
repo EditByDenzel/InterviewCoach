@@ -9,29 +9,29 @@ export const AppTheme = {
   ...MD3DarkTheme,
   colors: {
     ...MD3DarkTheme.colors,
-    // Primary brand colour: teal/cyan
-    primary: '#06B6D4',
-    onPrimary: '#0F172A',
-    primaryContainer: '#083344',
-    onPrimaryContainer: '#67E8F9',
+    // Primary brand colour: orange
+    primary: '#FF5C1C',
+    onPrimary: '#0D0402',
+    primaryContainer: '#51200D',
+    onPrimaryContainer: '#FFC6A7',
 
     // Secondary
-    secondary: '#818CF8',
-    onSecondary: '#1E1B4B',
-    secondaryContainer: '#312E81',
-    onSecondaryContainer: '#C7D2FE',
+    secondary: '#FFAA72',
+    onSecondary: '#321306',
+    secondaryContainer: '#51200D',
+    onSecondaryContainer: '#FFD4B9',
 
     // Surface / Background
-    background: '#0F172A',
-    onBackground: '#E2E8F0',
-    surface: '#1E293B',
-    onSurface: '#E2E8F0',
-    surfaceVariant: '#263348',
-    onSurfaceVariant: '#94A3B8',
+    background: '#0D0402',
+    onBackground: '#FFFFFF',
+    surface: '#211711',
+    onSurface: '#FFFFFF',
+    surfaceVariant: '#2C2019',
+    onSurfaceVariant: '#B8ADA7',
 
     // Outline / border
-    outline: '#334155',
-    outlineVariant: '#1E293B',
+    outline: '#574338',
+    outlineVariant: '#211711',
 
     // Error
     error: '#EF4444',
@@ -40,34 +40,34 @@ export const AppTheme = {
     onErrorContainer: '#FECACA',
 
     // Misc
-    inverseSurface: '#E2E8F0',
-    inverseOnSurface: '#0F172A',
-    inversePrimary: '#0E7490',
+    inverseSurface: '#FFFFFF',
+    inverseOnSurface: '#0D0402',
+    inversePrimary: '#C3430D',
     elevation: {
       level0: 'transparent',
-      level1: '#1E293B',
-      level2: '#263348',
-      level3: '#2D3D57',
-      level4: '#344666',
-      level5: '#3B5075',
+      level1: '#211711',
+      level2: '#2C2019',
+      level3: '#35271F',
+      level4: '#402E24',
+      level5: '#493429',
     },
   },
 };
 
 /** Convenience raw colour values (for StyleSheet / NativeWind fallbacks) */
 export const COLORS = {
-  background: '#0F172A',
-  surface: '#1E293B',
-  surfaceElevated: '#263348',
-  accent: '#06B6D4',
-  accentDim: '#0E7490',
-  accentGlow: 'rgba(6,182,212,0.15)',
+  background: '#0D0402',
+  surface: '#211711',
+  surfaceElevated: '#2C2019',
+  accent: '#FF5C1C',
+  accentDim: '#C3430D',
+  accentGlow: 'rgba(255,92,28,0.15)',
   success: '#22C55E',
   warning: '#F59E0B',
   error: '#EF4444',
-  textPrimary: '#E2E8F0',
-  textSecondary: '#94A3B8',
-  border: '#334155',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#B8ADA7',
+  border: '#574338',
   recordActive: '#F43F5E',
   recordGlow: 'rgba(244,63,94,0.25)',
 };

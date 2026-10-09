@@ -4,6 +4,22 @@
 
 ---
 
+## Current UI and preferences (9 October 2026)
+
+`CoachieDesign.tsx` supplies the responsive native frame, orange radial backdrop,
+Figma icons, voice controls, and shared tokens. `SettingsDesign.tsx` supplies
+grouped rows, headers, fields, and actions. Home, Interview, Summary, and all
+Settings subpages use this shared design. Styling uses React Native StyleSheet.
+
+Settings persist in AsyncStorage. Missing fields receive migration defaults:
+English, Gemini Kore, and the existing Rachel voice ID. Subpage saves merge only
+that page’s preferences, preserving API keys and other choices. A session takes
+a settings snapshot; changes affect the next session.
+
+The development-only design fixture replaces Gemini requests when explicitly
+enabled; it cannot run in production. It stores demo preferences in memory and
+blocks ElevenLabs requests. Normal operation uses real providers.
+
 ## Stack Overview
 
 ```

@@ -7,6 +7,7 @@
 // ============================================================
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+import { designPreviewFetch } from '../dev/designPreview';
 
 // --------------- Model identifiers -------------------------
 // Confirmed from ai.google.dev/gemini-api/docs/models (9 Oct 2026)
@@ -38,13 +39,14 @@ export async function generateInterviewText(
   topic: string,
   history: GeminiMessage[],
   prompt: string,
+  language: string = 'English',
 ): Promise<string> {
   const url = `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`;
 
   const systemInstruction = {
     parts: [
       {
-        text: `You are a professional interviewer conducting a screening assessment for the topic: ${topic}. Ask one clear, realistic interview question at a time. Keep each question concise (2-3 sentences max). Sound natural and human. Do not number questions. After 5 questions, when given the signal, provide a warm, constructive closing summary of the candidate's performance based on their answers.`,
+        text: `You are a professional interviewer conducting a screening assessment for the topic: ${topic}. Speak and write all questions and feedback in ${language}. Ask one clear, realistic interview question at a time. Keep each question concise (2-3 sentences max). Sound natural and human. Do not number questions. After 5 questions, when given the signal, provide a warm, constructive closing summary of the candidate's performance based on their answers.`,
       },
     ],
   };
@@ -64,7 +66,7 @@ export async function generateInterviewText(
     },
   };
 
-  const res = await fetch(url, {
+  const res = await designPreviewFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -97,6 +99,7 @@ export async function generateInterviewText(
 export async function generateGeminiTTS(
   apiKey: string,
   text: string,
+  voiceName: string = 'Kore',
 ): Promise<string> {
   const url = `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${apiKey}`;
 
@@ -106,13 +109,13 @@ export async function generateGeminiTTS(
       responseModalities: ['AUDIO'],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' },
+          prebuiltVoiceConfig: { voiceName },
         },
       },
     },
   };
 
-  const res = await fetch(url, {
+  const res = await designPreviewFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -174,7 +177,7 @@ export async function transcribeAudio(
     },
   };
 
-  const res = await fetch(url, {
+  const res = await designPreviewFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

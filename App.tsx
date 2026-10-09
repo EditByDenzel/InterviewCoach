@@ -4,14 +4,16 @@
 // + GestureHandlerRootView + NavigationContainer (via AppNavigator)
 // ============================================================
 import React from 'react';
-import { registerRootComponent } from 'expo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AppTheme } from './src/theme';
+import { useFonts } from 'expo-font';
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({ Inter_400Regular: require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'), Inter_500Medium: require('@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf'), Inter_600SemiBold: require('@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf') });
+  if (!fontsLoaded && !fontError) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PaperProvider theme={AppTheme}>
@@ -21,6 +23,3 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
-
-registerRootComponent(App);
-

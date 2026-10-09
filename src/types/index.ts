@@ -10,6 +10,9 @@ export interface AppSettings {
   geminiApiKey: string;
   elevenLabsApiKey: string;
   ttsProvider: TTSProvider;
+  language?: string;
+  geminiVoice?: string;
+  elevenLabsVoiceId?: string;
 }
 
 /** A single conversational turn */
@@ -41,4 +44,5 @@ export type RootStackParamList = {
   Interview: { topic: string };
   Summary: { rounds: InterviewRound[]; closingMessage: string; topic: string };
   Settings: undefined;
+  Preferences: { page: 'language' | 'voice' | 'keys' | 'about' };
 };

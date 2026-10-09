@@ -12,7 +12,7 @@ import { RootStackParamList } from '../types';
 import HomeScreen from '../screens/HomeScreen';
 import InterviewScreen from '../screens/InterviewScreen';
 import SummaryScreen from '../screens/SummaryScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+import SettingsScreen, { PreferencesScreen } from '../screens/SettingsScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -34,18 +34,20 @@ export default function AppNavigator() {
           },
           cardStyle: { backgroundColor: theme.colors.background },
           headerShadowVisible: false,
+          headerShown: false,
         }}
       >
         <Stack.Screen
           name="Home"
           component={HomeScreen}
-          options={{ title: '🎙️ Interview Coach' }}
+          options={{ title: 'Coachie', headerShown: false }}
         />
         <Stack.Screen
           name="Interview"
           component={InterviewScreen}
           options={{
             title: 'Live Interview',
+            headerShown: false,
             headerLeft: () => null,
             gestureEnabled: false,
           }}
@@ -62,8 +64,9 @@ export default function AppNavigator() {
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
-          options={{ title: '⚙️ Settings' }}
+          options={{ title: 'Settings' }}
         />
+        <Stack.Screen name="Preferences" component={PreferencesScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

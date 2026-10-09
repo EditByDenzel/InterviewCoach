@@ -8,6 +8,26 @@
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
+
+let activeSound: Audio.Sound | null = null;
+let finishPlayback: (() => void) | null = null;
+let playbackMuted = false;
+let playbackGeneration = 0;
+
+export async function stopPlayback(): Promise<void> {
+  playbackGeneration++;
+  const sound = activeSound;
+  activeSound = null;
+  finishPlayback?.();
+  finishPlayback = null;
+  if (sound) await sound.unloadAsync();
+}
+
+export async function setPlaybackMuted(muted: boolean): Promise<void> {
+  playbackMuted = muted;
+  await activeSound?.setIsMutedAsync(muted);
+}
 
 // --------------- Playback ---------------------------------
 
@@ -50,38 +70,52 @@ export async function playBase64Audio(
   base64Audio: string,
   extension: 'wav' | 'mp3' = 'wav',
 ): Promise<void> {
+  await stopPlayback();
+  const generation = playbackGeneration;
   await setPlaybackMode();
 
   const uri = `${FileSystem.cacheDirectory}tts_output.${extension}`;
 
   // Write the base64 data as a binary file
-  await FileSystem.writeAsStringAsync(uri, base64Audio, {
+  if (Platform.OS !== 'web') await FileSystem.writeAsStringAsync(uri, base64Audio, {
     encoding: FileSystem.EncodingType.Base64,
   });
 
   const { sound } = await Audio.Sound.createAsync(
-    { uri },
-    { shouldPlay: true, volume: 1.0 },
+    { uri: Platform.OS === 'web' ? `data:audio/${extension === 'mp3' ? 'mpeg' : 'wav'};base64,${base64Audio}` : uri },
+    { shouldPlay: true, volume: 1.0, isMuted: playbackMuted },
   );
+  if (generation !== playbackGeneration) { await sound.unloadAsync(); return; }
+  activeSound = sound;
 
   // Wait for playback to finish
   await new Promise<void>((resolve, reject) => {
+    const finish = (error?: Error) => {
+      clearTimeout(timeout);
+      if (activeSound === sound) { activeSound = null; finishPlayback = null; }
+      sound.setOnPlaybackStatusUpdate(null);
+      sound.unloadAsync().then(() => error ? reject(error) : resolve(), unloadError => reject(error ?? unloadError));
+    };
+    const timeout = setTimeout(() => finish(), 120_000);
+    finishPlayback = () => { clearTimeout(timeout); sound.setOnPlaybackStatusUpdate(null); resolve(); };
     sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-      if (!status.isLoaded) return;
-      if (status.didJustFinish) {
-        sound.unloadAsync().finally(resolve);
-      }
+      if (!status.isLoaded) { if(status.error) finish(new Error(status.error)); return; }
+      if (status.didJustFinish) finish();
     });
-    // Safety timeout: 2 minutes max
-    setTimeout(() => {
-      sound.unloadAsync().finally(resolve);
-    }, 120_000);
   });
 }
 
 // --------------- Recording --------------------------------
 
 let activeRecording: Audio.Recording | null = null;
+
+export async function pauseRecording(): Promise<void> {
+  await activeRecording?.pauseAsync();
+}
+
+export async function resumeRecording(): Promise<void> {
+  await activeRecording?.startAsync();
+}
 
 /**
  * Request microphone permission.
@@ -137,7 +171,15 @@ export async function stopRecording(): Promise<string | null> {
 export async function readAudioAsBase64(
   uri: string,
 ): Promise<{ base64: string; mimeType: string }> {
-  const base64 = await FileSystem.readAsStringAsync(uri, {
+  const base64 = Platform.OS === 'web' ? await new Promise<string>(async (resolve, reject) => {
+    try {
+      const blob = await (await fetch(uri)).blob();
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1]);
+      reader.onerror = () => reject(new Error('Could not read recorded audio.'));
+      reader.readAsDataURL(blob);
+    } catch(error) { reject(error); }
+  }) : await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
   });
 
@@ -150,7 +192,7 @@ export async function readAudioAsBase64(
     mp4: 'audio/mp4',
     caf: 'audio/x-caf',
   };
-  const mimeType = mimeMap[ext] ?? 'audio/m4a';
+  const mimeType = Platform.OS === 'web' ? 'audio/webm' : mimeMap[ext] ?? 'audio/m4a';
 
   return { base64, mimeType };
 }

@@ -40,7 +40,8 @@
         {
           "microphonePermission": "Allow InterviewCoach to access your microphone to record interview answers."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "sdkVersion": "51.0.0"
   }
