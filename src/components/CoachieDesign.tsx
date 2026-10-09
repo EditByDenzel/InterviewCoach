@@ -253,6 +253,23 @@ export function TranscriptionIcon({ open = false }: { open?: boolean }) {
   return <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={open ? '#FFAB72' : '#D8C3B5'} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><Path d="M3 12h7m-3-3 3 3-3 3m6 3 4-12 4 12m-6.5-4h5" /></Svg>;
 }
 
+export function VoiceSettingsIcon({ size = 18, color = '#FFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+    </Svg>
+  );
+}
+
+export function RetryIcon({ size = 18, color = '#FFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <Path d="M3 3v5h5" />
+    </Svg>
+  );
+}
+
 export function GlassButton({ children, onPress, label, style, disabled }: PropsWithChildren<{ onPress: () => void; label: string; style?: StyleProp<ViewStyle>; disabled?: boolean }>) {
   return <MotionPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={[styles.glassButton, style]}>{children}</MotionPressable>;
 }

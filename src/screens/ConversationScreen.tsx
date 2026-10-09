@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, SavedConversation } from '../types';
 import { loadConversationLibrary } from '../store/conversationStore';
-import { DESIGN, DesignFrame, DesignIcon, GlassButton, Orb, Waveform } from '../components/CoachieDesign';
+import { DESIGN, DesignFrame, DesignIcon, GlassButton, Orb, Waveform, TranscriptionIcon, RetryIcon } from '../components/CoachieDesign';
 import { FadeIn, MotionPressable, Reveal } from '../components/Motion';
 
 type Props = StackScreenProps<RootStackParamList, 'Conversation'>;
@@ -183,9 +183,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                             onPress={() => setCollapsed((c) => ({ ...c, [idx]: !c[idx] }))}
                             style={styles.collapseButton}
                           >
-                            <View style={{ transform: [{ rotate: isCollapsed ? '180deg' : '0deg' }] }}>
-                              <DesignIcon name="collapse" />
-                            </View>
+                            <TranscriptionIcon open={!isCollapsed} />
                           </MotionPressable>
                         </View>
 
@@ -210,22 +208,51 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 );
               })}
 
-              {/* Coach Closing Feedback */}
-              {!!conversation.closingMessage && (
-                <FadeIn style={styles.feedbackCard}>
-                  <Text style={styles.feedbackHeading}>Coach feedback</Text>
-                  <Text style={styles.feedbackBody}>{conversation.closingMessage}</Text>
-                </FadeIn>
-              )}
+              {/* Completed: Coach Feedback & Practice Again CTA */}
+              {conversation.status === 'completed' ? (
+                <>
+                  {!!conversation.closingMessage && (
+                    <FadeIn style={styles.feedbackCard}>
+                      <Text style={styles.feedbackHeading}>Coach feedback</Text>
+                      <Text style={styles.feedbackBody}>{conversation.closingMessage}</Text>
+                    </FadeIn>
+                  )}
 
-              {/* Practice Again CTA */}
-              <GlassButton
-                label="Practice this topic again"
-                onPress={() => navigation.navigate('Home', { topic: conversation.topic })}
-                style={styles.practiceButton}
-              >
-                <Text style={styles.practiceText}>Practice this topic again</Text>
-              </GlassButton>
+                  <GlassButton
+                    label="Practice this topic again"
+                    onPress={() => navigation.navigate('Home', { topic: conversation.topic })}
+                    style={styles.practiceButton}
+                  >
+                    <Text style={styles.practiceText}>Practice this topic again</Text>
+                  </GlassButton>
+                </>
+              ) : (
+                /* In Progress State: Retry button on left and Continue interview in center */
+                <View style={styles.inProgressFooterRow}>
+                  <GlassButton
+                    label="Retry interview"
+                    onPress={() => navigation.navigate('Interview', { topic: conversation.topic })}
+                    style={styles.retryRoundButton}
+                  >
+                    <RetryIcon size={18} color="#FFF" />
+                  </GlassButton>
+
+                  <MotionPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue interview"
+                    onPress={() => navigation.navigate('Interview', { topic: conversation.topic })}
+                    style={styles.continueButton}
+                  >
+                    <LinearGradient
+                      colors={['#FF6F26', '#E04E10']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <Text style={styles.continueButtonText}>Continue</Text>
+                  </MotionPressable>
+                </View>
+              )}
             </>
           )
         )}
@@ -530,5 +557,37 @@ const styles = StyleSheet.create({
     color: '#FFB083',
     textAlign: 'center',
     paddingVertical: 24,
+  },
+  inProgressFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  retryRoundButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,180,120,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueButton: {
+    flex: 1,
+    maxWidth: 220,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueButtonText: {
+    fontFamily: DESIGN.semibold,
+    fontSize: 15,
+    color: '#FFF',
   },
 });

@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, InterviewRound, InterviewPhase, AppSettings, SavedConversation } from '../types';
-import { loadSettings } from '../store/settingsStore';
+import { loadSettings, updateSettings } from '../store/settingsStore';
 import { createConversationId, saveConversation } from '../store/conversationStore';
 import { FadeIn, LiveDots, MotionPressable, Reveal, useMotion } from '../components/Motion';
 import { generateInterviewText, generateGeminiTTS, transcribeAudio, GeminiMessage } from '../services/geminiService';
@@ -42,6 +42,8 @@ import {
   HeroOrb,
   Waveform,
   ProgressiveSpokenText,
+  TranscriptionIcon,
+  VoiceSettingsIcon,
 } from '../components/CoachieDesign';
 
 type Props = StackScreenProps<RootStackParamList, 'Interview'>;
@@ -112,6 +114,9 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const [seconds, setSeconds] = useState(0);
   const [muted, setMuted] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [selectedLang, setSelectedLang] = useState('English');
+  const [selectedVoice, setSelectedVoice] = useState('Kore');
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [playProgress, setPlayProgress] = useState(0);
@@ -244,11 +249,18 @@ export default function InterviewScreen({ navigation, route }: Props) {
         try {
           if (await requestMicrophonePermission()) {
             await stopCandidate();
-            await startRecording(() => {
-              if (alive.current && !paused && !locked.current) {
-                record();
+            await startRecording(
+              () => {
+                if (alive.current && !paused && !locked.current) {
+                  record();
+                }
+              },
+              () => {
+                if (alive.current && !paused && !locked.current) {
+                  void pause();
+                }
               }
-            });
+            );
             if (alive.current) {
               setSeconds(0);
               setPhase('recording');
@@ -318,6 +330,8 @@ export default function InterviewScreen({ navigation, route }: Props) {
     if (!pendingUri.current) throw new Error('Recording was not saved. Please record again.');
     const audio = await readAudioAsBase64(pendingUri.current);
     ensureActive();
+    const dataUri = `data:${audio.mimeType};base64,${audio.base64}`;
+    recordings.current[completed.current.length] = { uri: dataUri, seconds };
     const text = await transcribeAudio(settings.current.geminiApiKey, audio.base64, audio.mimeType);
     ensureActive();
     if (!text.trim()) {
@@ -345,11 +359,18 @@ export default function InterviewScreen({ navigation, route }: Props) {
         if (!(await requestMicrophonePermission()))
           throw new Error('Microphone access is required. Allow it in your device settings or type an answer.');
         ensureActive();
-        await startRecording(() => {
-          if (alive.current && !paused && !locked.current) {
-            record();
+        await startRecording(
+          () => {
+            if (alive.current && !paused && !locked.current) {
+              record();
+            }
+          },
+          () => {
+            if (alive.current && !paused && !locked.current) {
+              void pause();
+            }
           }
-        });
+        );
         if (!alive.current) {
           await stopRecording();
           return;
@@ -383,13 +404,28 @@ export default function InterviewScreen({ navigation, route }: Props) {
   };
 
   const replay = async (index: number, candidate = false) => {
-    if (phase !== 'idle' || locked.current || error) return;
+    if (locked.current) return;
+    const targetKey = candidate ? `a-${index}` : `q-${index}`;
+    if (playingKey === targetKey) {
+      if (candidate) await stopCandidate();
+      else await stopPlayback();
+      setPlayingKey(null);
+      setPlayProgress(0);
+      return;
+    }
+    if (phase === 'recording') {
+      try {
+        await pauseRecording();
+        setPaused(true);
+      } catch (_) {}
+    }
     await perform(async () => {
       try {
         if (candidate) {
+          await stopPlayback();
           await stopCandidate();
           const recording = recordings.current[index];
-          if (!recording) return;
+          if (!recording?.uri) return;
           const { sound } = await Audio.Sound.createAsync(
             { uri: recording.uri },
             { shouldPlay: true, isMuted: muted, progressUpdateIntervalMillis: 100 }
@@ -423,7 +459,10 @@ export default function InterviewScreen({ navigation, route }: Props) {
           });
         } else {
           await stopCandidate();
-          await speak(index === rounds.length ? question : rounds[index].question, index);
+          await stopPlayback();
+          const textToSpeak = index === rounds.length ? question : rounds[index]?.question;
+          if (!textToSpeak) return;
+          await speak(textToSpeak, index);
           setPhase('idle');
         }
       } catch (err) {
@@ -450,11 +489,24 @@ export default function InterviewScreen({ navigation, route }: Props) {
     navigation.popToTop();
   };
 
+  const applyQuickSettings = async (lang: string, voiceName: string) => {
+    setSelectedLang(lang);
+    setSelectedVoice(voiceName);
+    settings.current = {
+      ...settings.current,
+      language: lang,
+      geminiVoice: voiceName,
+    };
+    await updateSettings({ language: lang, geminiVoice: voiceName });
+  };
+
   useEffect(() => {
     alive.current = true;
     void perform(async () => {
       settings.current = await loadSettings();
       ensureActive();
+      setSelectedLang(settings.current.language || 'English');
+      setSelectedVoice(settings.current.geminiVoice || 'Kore');
       if (!settings.current.geminiApiKey)
         throw new Error('Add your Gemini API key in Settings before starting.');
       await persist();
@@ -476,7 +528,16 @@ export default function InterviewScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (phase !== 'recording' || paused) return;
-    const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
+    const timer = setInterval(() => {
+      setSeconds((s) => {
+        const next = s + 1;
+        // Idle silence protection: if no answer after 8 seconds, pause to conserve tokens
+        if (next >= 8 && alive.current && !locked.current) {
+          void pause();
+        }
+        return next;
+      });
+    }, 1000);
     return () => clearInterval(timer);
   }, [phase, paused]);
 
@@ -574,7 +635,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
             <MotionPressable
               accessibilityRole="button"
               accessibilityLabel={isPlaying ? 'Stop playback' : 'Play recorded answer'}
-              disabled={isPending || phase !== 'idle'}
+              disabled={isPending}
               onPress={() => {
                 if (isPlaying) void stopCandidate();
                 else void replay(index, true);
@@ -604,9 +665,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
               onPress={() => setCollapsed((c) => ({ ...c, [index]: !c[index] }))}
               style={styles.collapseButton}
             >
-              <View style={{ transform: [{ rotate: isCollapsed ? '180deg' : '0deg' }] }}>
-                <DesignIcon name="collapse" />
-              </View>
+              <TranscriptionIcon open={!isCollapsed} />
             </MotionPressable>
           </View>
 
@@ -702,14 +761,11 @@ export default function InterviewScreen({ navigation, route }: Props) {
               <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
 
               <GlassButton
-                label="Submit answer"
-                onPress={send}
-                disabled={!!error || (phase !== 'recording' && !(phase === 'idle' && answer.trim()))}
+                label="Voice & language settings"
+                onPress={() => setQuickSettingsOpen(true)}
                 style={styles.sideCircleButton}
               >
-                <View style={{ transform: [{ rotate: '45deg' }] }}>
-                  <DesignIcon name="send" />
-                </View>
+                <VoiceSettingsIcon size={18} color="#FFF" />
               </GlassButton>
             </View>
             <View style={styles.homeIndicatorBar} />
@@ -752,11 +808,12 @@ export default function InterviewScreen({ navigation, route }: Props) {
               {phase === 'transcribing' && renderCandidateCard('Turning your words into text...', rounds.length, true)}
             </ScrollView>
 
-            {/* Anchored Atmospheric Speaker Panel (Seamless blend - NO dividing border) */}
+            {/* Anchored Atmospheric Speaker Panel (Backdrop blur - NO solid bg or stroke) */}
             <View style={styles.anchoredSpeakerFooter}>
+              <BlurView intensity={Platform.OS === 'web' ? 25 : 35} tint="dark" style={StyleSheet.absoluteFill} />
               <LinearGradient
                 pointerEvents="none"
-                colors={['transparent', 'rgba(16,7,4,0.92)', '#0A0402']}
+                colors={['transparent', 'rgba(12, 5, 3, 0.72)', 'rgba(10, 4, 2, 0.95)']}
                 style={StyleSheet.absoluteFill}
               />
 
@@ -770,7 +827,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
                   {!error && !paused && phase !== 'idle' && phase !== 'done' && <LiveDots active />}
                 </View>
 
-                {/* Centered Spoken Query Display / Word-by-word Progressive Highlight / Editable Answer */}
+                {/* Subtitle / Capped Input area */}
                 {error ? (
                   <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>{error}</Text>
@@ -785,28 +842,38 @@ export default function InterviewScreen({ navigation, route }: Props) {
                     </MotionPressable>
                   </View>
                 ) : phase === 'idle' ? (
-                  <TextInput
-                    accessibilityLabel="Type your answer"
-                    multiline
-                    value={answer}
-                    onChangeText={setAnswer}
-                    placeholder="Type an answer or tap the mic to speak."
-                    placeholderTextColor="#A1A1AA"
-                    style={styles.spokenQueryInput}
-                  />
+                  <View style={styles.spokenInputRow}>
+                    <TextInput
+                      accessibilityLabel="Type your answer"
+                      value={answer}
+                      onChangeText={setAnswer}
+                      onSubmitEditing={send}
+                      returnKeyType="send"
+                      placeholder="Type an answer or tap mic to speak."
+                      placeholderTextColor="#A1A1AA"
+                      style={styles.spokenQueryInput}
+                    />
+                    {!!answer.trim() && (
+                      <MotionPressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Send answer"
+                        onPress={send}
+                        style={styles.inlineSendAction}
+                      >
+                        <DesignIcon name="send" />
+                      </MotionPressable>
+                    )}
+                  </View>
                 ) : (
-                  <ProgressiveSpokenText
-                    text={
-                      phase === 'recording'
-                        ? paused
-                          ? 'Recording paused. Tap resume to speak.'
-                          : 'Speak freely. Tap send when you’re ready.'
-                        : question || topic
-                    }
-                    progress={playProgress}
-                    active={phase === 'speaking'}
-                    style={styles.spokenQueryText}
-                  />
+                  <Text numberOfLines={2} style={styles.spokenFooterCaption}>
+                    {phase === 'recording'
+                      ? paused
+                        ? 'Recording paused. Tap resume to speak.'
+                        : 'Aira is listening to your answer…'
+                      : phase === 'speaking'
+                      ? 'Listen to the interview question above.'
+                      : 'Preparing next response…'}
+                  </Text>
                 )}
 
                 {/* Action Controls Row */}
@@ -830,14 +897,11 @@ export default function InterviewScreen({ navigation, route }: Props) {
                   <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
 
                   <GlassButton
-                    label="Submit answer"
-                    onPress={send}
-                    disabled={!!error || (phase !== 'recording' && !(phase === 'idle' && answer.trim()))}
+                    label="Voice & language settings"
+                    onPress={() => setQuickSettingsOpen(true)}
                     style={styles.sideCircleButton}
                   >
-                    <View style={{ transform: [{ rotate: '45deg' }] }}>
-                      <DesignIcon name="send" />
-                    </View>
+                    <VoiceSettingsIcon size={18} color="#FFF" />
                   </GlassButton>
                 </View>
 
@@ -864,6 +928,93 @@ export default function InterviewScreen({ navigation, route }: Props) {
               </GlassButton>
               <GlassButton label="End session" onPress={() => void close()} style={[styles.modalButton, styles.endButton]}>
                 <Text style={[styles.modalButtonText, { color: '#FF7536' }]}>End session</Text>
+              </GlassButton>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Voice & Language Quick Setting Modal */}
+      <Modal visible={quickSettingsOpen} transparent animationType="fade" onRequestClose={() => setQuickSettingsOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.quickSettingsCard}>
+            <View style={styles.quickSettingsHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Voice & Language</Text>
+                <Text style={styles.quickSettingsSubtitle}>Customize Aira for this session</Text>
+              </View>
+              <GlassButton label="Close settings" onPress={() => setQuickSettingsOpen(false)} style={styles.quickCloseButton}>
+                <DesignIcon name="close" />
+              </GlassButton>
+            </View>
+
+            {/* Language Selector */}
+            <Text style={styles.quickSectionLabel}>INTERVIEW LANGUAGE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {['English', 'Spanish', 'French', 'German', 'Thai', 'Japanese', 'Hindi', 'Arabic'].map((lang) => {
+                const isSelected = selectedLang === lang;
+                return (
+                  <MotionPressable
+                    key={lang}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select language ${lang}`}
+                    onPress={() => void applyQuickSettings(lang, selectedVoice)}
+                    style={[styles.chip, isSelected && styles.chipActive]}
+                  >
+                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{lang}</Text>
+                  </MotionPressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Gemini Studio Voice Selector */}
+            <Text style={styles.quickSectionLabel}>AI VOICE (GEMINI 3.8 FLASH)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {[
+                ['Kore', 'Firm'],
+                ['Puck', 'Upbeat'],
+                ['Charon', 'Informative'],
+                ['Aoede', 'Breezy'],
+                ['Zephyr', 'Bright'],
+                ['Fenrir', 'Excitable'],
+                ['Leda', 'Youthful'],
+              ].map(([vName, tone]) => {
+                const isSelected = selectedVoice === vName;
+                return (
+                  <MotionPressable
+                    key={vName}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select voice ${vName}`}
+                    onPress={() => void applyQuickSettings(selectedLang, vName)}
+                    style={[styles.chip, isSelected && styles.chipActive]}
+                  >
+                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{vName}</Text>
+                    <Text style={[styles.chipSubText, isSelected && styles.chipSubTextActive]}>{tone}</Text>
+                  </MotionPressable>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.quickFooterActions}>
+              <MotionPressable
+                accessibilityRole="button"
+                accessibilityLabel="Open all preferences"
+                onPress={() => {
+                  setQuickSettingsOpen(false);
+                  navigation.navigate('Preferences', { page: 'voice' });
+                }}
+                style={styles.morePreferencesButton}
+              >
+                <Text style={styles.morePreferencesText}>All settings & API keys →</Text>
+              </MotionPressable>
+
+              <GlassButton
+                label="Done"
+                onPress={() => setQuickSettingsOpen(false)}
+                style={styles.quickDoneButton}
+              >
+                <Text style={styles.quickDoneText}>Done</Text>
               </GlassButton>
             </View>
           </View>
@@ -1189,25 +1340,50 @@ const styles = StyleSheet.create({
     color: '#A1A1AA',
     textAlign: 'center',
   },
-  spokenQueryText: {
-    fontFamily: DESIGN.semibold,
-    fontSize: 18,
-    lineHeight: 25,
-    letterSpacing: -0.35,
+  spokenFooterCaption: {
+    fontFamily: DESIGN.font,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#D8C9C1',
     textAlign: 'center',
-    color: '#FFF',
-    minHeight: 44,
-    maxHeight: 110,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    maxHeight: 44,
+  },
+  spokenInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 14,
+    minHeight: 46,
   },
   spokenQueryInput: {
+    flex: 1,
+    fontFamily: DESIGN.medium,
+    fontSize: 14,
+    color: '#FFF',
+    paddingVertical: 10,
+  },
+  inlineSendAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF6F26',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  spokenQueryText: {
     fontFamily: DESIGN.semibold,
-    fontSize: 20,
-    lineHeight: 27,
-    letterSpacing: -0.4,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.3,
     textAlign: 'center',
     color: '#FFF',
-    minHeight: 54,
+    maxHeight: 46,
     paddingHorizontal: 12,
   },
   actionControlsRow: {
@@ -1352,6 +1528,105 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontFamily: DESIGN.medium,
+    fontSize: 13,
+    color: '#FFF',
+  },
+  quickSettingsCard: {
+    width: '90%',
+    maxWidth: 420,
+    backgroundColor: '#160D09',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,140,60,0.22)',
+    padding: 20,
+    gap: 14,
+  },
+  quickSettingsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  quickSettingsSubtitle: {
+    fontFamily: DESIGN.font,
+    fontSize: 12,
+    color: '#B8ADA7',
+    marginTop: 2,
+  },
+  quickCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickSectionLabel: {
+    fontFamily: DESIGN.semibold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    color: '#FF944D',
+    marginTop: 4,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipActive: {
+    backgroundColor: 'rgba(255,111,38,0.2)',
+    borderColor: '#FF6F26',
+  },
+  chipText: {
+    fontFamily: DESIGN.medium,
+    fontSize: 13,
+    color: '#D8C9C1',
+  },
+  chipTextActive: {
+    color: '#FFF',
+    fontFamily: DESIGN.semibold,
+  },
+  chipSubText: {
+    fontFamily: DESIGN.font,
+    fontSize: 10,
+    color: '#A1A1AA',
+    marginTop: 1,
+  },
+  chipSubTextActive: {
+    color: '#FFB890',
+  },
+  quickFooterActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  morePreferencesButton: {
+    paddingVertical: 6,
+  },
+  morePreferencesText: {
+    fontFamily: DESIGN.font,
+    fontSize: 12,
+    color: '#FFA370',
+  },
+  quickDoneButton: {
+    paddingHorizontal: 16,
+    height: 34,
+    borderRadius: 17,
+  },
+  quickDoneText: {
+    fontFamily: DESIGN.semibold,
     fontSize: 13,
     color: '#FFF',
   },

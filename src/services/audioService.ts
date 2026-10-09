@@ -137,8 +137,8 @@ let vadInterval: any = null;
 let vadStream: any = null;
 let vadAudioContext: any = null;
 
-function setupWebVAD(onSilenceDetected?: () => void) {
-  if (Platform.OS !== 'web' || !onSilenceDetected) return;
+function setupWebVAD(onSilenceDetected?: () => void, onIdleTimeout?: () => void) {
+  if (Platform.OS !== 'web' || (!onSilenceDetected && !onIdleTimeout)) return;
   try {
     const AudioContextClass = typeof window !== 'undefined' ? ((window as any).AudioContext || (window as any).webkitAudioContext) : null;
     if (!AudioContextClass || !navigator?.mediaDevices?.getUserMedia) return;
@@ -155,6 +155,7 @@ function setupWebVAD(onSilenceDetected?: () => void) {
       let speechStarted = false;
       let speechStartTime = 0;
       let lastSpeechTime = 0;
+      const recordStartTime = Date.now();
 
       vadInterval = setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
@@ -173,9 +174,12 @@ function setupWebVAD(onSilenceDetected?: () => void) {
           lastSpeechTime = now;
         } else {
           speechStartTime = 0;
-          if (speechStarted && lastSpeechTime > 0 && now - lastSpeechTime > 2300) {
+          if (!speechStarted && now - recordStartTime > 7000) {
             cleanUpVAD();
-            onSilenceDetected();
+            onIdleTimeout?.();
+          } else if (speechStarted && lastSpeechTime > 0 && now - lastSpeechTime > 2300) {
+            cleanUpVAD();
+            onSilenceDetected?.();
           }
         }
       }, 100);
@@ -201,7 +205,7 @@ function cleanUpVAD() {
  * on iOS as AAC in M4A container.
  * Accepts optional onSilenceDetected callback for hands-free conversational flow.
  */
-export async function startRecording(onSilenceDetected?: () => void): Promise<void> {
+export async function startRecording(onSilenceDetected?: () => void, onIdleTimeout?: () => void): Promise<void> {
   if(designPreviewEnabled){fixtureRecording=true;return;}
   cleanUpVAD();
   if (activeRecording) {
@@ -219,9 +223,10 @@ export async function startRecording(onSilenceDetected?: () => void): Promise<vo
     Audio.RecordingOptionsPresets.HIGH_QUALITY,
   );
 
-  if (Platform.OS !== 'web' && onSilenceDetected) {
+  if (Platform.OS !== 'web' && (onSilenceDetected || onIdleTimeout)) {
     let speechStarted = false;
     let lastSpeechTime = 0;
+    const recordStartTime = Date.now();
     recording.setOnRecordingStatusUpdate((status) => {
       if (!status.isRecording) return;
       const now = Date.now();
@@ -229,9 +234,12 @@ export async function startRecording(onSilenceDetected?: () => void): Promise<vo
       if (metering > -38) {
         speechStarted = true;
         lastSpeechTime = now;
+      } else if (!speechStarted && now - recordStartTime > 7000) {
+        recording.setOnRecordingStatusUpdate(null);
+        onIdleTimeout?.();
       } else if (speechStarted && lastSpeechTime > 0 && now - lastSpeechTime > 2300) {
         recording.setOnRecordingStatusUpdate(null);
-        onSilenceDetected();
+        onSilenceDetected?.();
       }
     });
   }
@@ -239,8 +247,8 @@ export async function startRecording(onSilenceDetected?: () => void): Promise<vo
   await recording.startAsync();
   activeRecording = recording;
 
-  if (Platform.OS === 'web' && onSilenceDetected) {
-    setupWebVAD(onSilenceDetected);
+  if (Platform.OS === 'web') {
+    setupWebVAD(onSilenceDetected, onIdleTimeout);
   }
 }
 

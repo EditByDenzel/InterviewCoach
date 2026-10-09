@@ -175,11 +175,7 @@ export function ConversationSidebar({
                           <Text numberOfLines={2} style={[styles.itemTitle, isLatest && { color: '#FFF' }]}>
                             {item.topic}
                           </Text>
-                          {isLatest && (
-                            <View style={styles.recentBadge}>
-                              <Text style={styles.recentBadgeText}>Recent</Text>
-                            </View>
-                          )}
+                          {isLatest && <View style={styles.recentDot} />}
                         </View>
                         <Text style={styles.meta}>
                           {item.isSample
@@ -255,8 +251,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   itemLatest: {
-    backgroundColor: 'rgba(255,100,30,0.12)',
-    borderColor: 'rgba(255,140,60,0.35)',
+    backgroundColor: 'rgba(255,100,30,0.09)',
   },
   itemHeaderRow: {
     flexDirection: 'row',
@@ -264,16 +259,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
   },
-  recentBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  recentDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#FF6F26',
-  },
-  recentBadgeText: {
-    fontFamily: DESIGN.semibold,
-    fontSize: 10,
-    color: '#FFF',
+    marginTop: 6,
   },
   itemTitle: { fontFamily: DESIGN.medium, color: '#F4ECE6', fontSize: 14, lineHeight: 20, flex: 1 },
   meta: { fontFamily: DESIGN.font, color: '#9E928A', fontSize: 11, lineHeight: 16 },
