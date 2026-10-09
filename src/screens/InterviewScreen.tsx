@@ -241,7 +241,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
       topic,
       history.current,
       completed.current.length === 0
-        ? 'Start the interview. Ask your first question.'
+        ? 'Start the interview immediately with your first technical or situational question. Do NOT include any greetings, pleasantries, or introductions.'
         : "Continue the interview. Ask the next question based on the candidate's previous answer.",
       settings.current.language
     );
@@ -747,7 +747,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
           <View style={styles.voiceCenterHero}>
             <HeroOrb size={180} />
             <Text style={styles.voiceListeningStatus}>
-              {error ? 'Something went wrong' : paused ? 'Recording paused' : phaseLabels[phase]}
+              {error ? 'Something went wrong' : paused ? 'Paused' : phaseLabels[phase]}
             </Text>
             <ProgressiveSpokenText
               text={question || topic}
@@ -826,20 +826,21 @@ export default function InterviewScreen({ navigation, route }: Props) {
               {phase === 'transcribing' && renderCandidateCard('Turning your words into text...', rounds.length, true)}
             </ScrollView>
 
-            {/* Anchored Atmospheric Speaker Panel (Backdrop blur - NO solid bg or stroke) */}
+            {/* Anchored Atmospheric Speaker Panel with soft feathered fade */}
             <View style={styles.anchoredSpeakerFooter}>
-              <BlurView intensity={Platform.OS === 'web' ? 25 : 35} tint="dark" style={StyleSheet.absoluteFill} />
               <LinearGradient
                 pointerEvents="none"
-                colors={['transparent', 'rgba(12, 5, 3, 0.72)', 'rgba(10, 4, 2, 0.95)']}
-                style={StyleSheet.absoluteFill}
+                colors={['transparent', 'rgba(13, 4, 2, 0.45)', 'rgba(13, 4, 2, 0.85)', '#0D0402']}
+                locations={[0, 0.25, 0.65, 1]}
+                style={[StyleSheet.absoluteFill, { top: -36 }]}
               />
+              <BlurView intensity={Platform.OS === 'web' ? 15 : 25} tint="dark" style={StyleSheet.absoluteFill} />
 
               <View style={styles.footerInner}>
                 {/* Status Subheader */}
                 <View style={styles.statusSubheaderRow}>
                   <Text accessibilityLiveRegion="polite" style={styles.statusSubheaderText}>
-                    {error ? 'Something went wrong' : paused ? 'Recording paused' : phaseLabels[phase]}
+                    {error ? 'Something went wrong' : paused ? 'Paused' : phaseLabels[phase]}
                     {phase === 'recording' ? ` · ${formatTime(seconds)}` : ''}
                   </Text>
                   {!error && !paused && phase !== 'idle' && phase !== 'done' && <LiveDots active />}
@@ -886,7 +887,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
                   <Text numberOfLines={2} style={styles.spokenFooterCaption}>
                     {phase === 'recording'
                       ? paused
-                        ? 'Recording paused. Tap resume to speak.'
+                        ? 'Tap resume to continue speaking.'
                         : 'Aira is listening to your answer…'
                       : phase === 'speaking'
                       ? 'Listen to the interview question above.'
@@ -1291,6 +1292,7 @@ const styles = StyleSheet.create({
   candidateWaveArea: {
     flex: 1,
     gap: 2,
+    marginRight: 6,
   },
   candidateSizeCaption: {
     fontFamily: DESIGN.font,
@@ -1298,14 +1300,15 @@ const styles = StyleSheet.create({
     color: 'rgba(254,215,170,0.6)',
   },
   collapseButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(249,115,22,0.2)',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderColor: 'rgba(249,115,22,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
   },
   candidateTranscript: {
     borderTopWidth: 1,
@@ -1551,7 +1554,7 @@ const styles = StyleSheet.create({
   },
   quickSettingsCard: {
     width: '90%',
-    maxWidth: 420,
+    maxWidth: 348,
     backgroundColor: '#160D09',
     borderRadius: 24,
     borderWidth: 1,

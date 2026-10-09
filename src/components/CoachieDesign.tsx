@@ -140,7 +140,7 @@ export function Waveform({ candidate = false, active = false, progress = 0 }: { 
     animation.start(); return () => animation.stop();
   }, [active, reduced, pulse]);
 
-  const step = candidate ? 6 : 5;
+  const step = candidate ? 7 : 5;
   const count = containerWidth > 0 ? Math.max(16, Math.floor(containerWidth / step)) : 34;
   const heights = useMemo(() => {
     const base = candidate ? CANDIDATE_WAVE_HEIGHTS : AI_WAVE_HEIGHTS;
@@ -250,7 +250,15 @@ export function ProgressiveSpokenText({
 }
 
 export function TranscriptionIcon({ open = false }: { open?: boolean }) {
-  return <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={open ? '#FFAB72' : '#D8C3B5'} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><Path d="M3 12h7m-3-3 3 3-3 3m6 3 4-12 4 12m-6.5-4h5" /></Svg>;
+  const color = open ? '#FF9E60' : '#D4C4BA';
+  return (
+    <View style={styles.transcribeBadge}>
+      <Svg width={9} height={9} viewBox="0 0 10 10" fill="none">
+        <Path d="M1 5h6.5m-2.5-2.5L7.5 5 5 7.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+      <Text style={[styles.transcribeLetter, { color }]}>A</Text>
+    </View>
+  );
 }
 
 export function VoiceSettingsIcon({ size = 18, color = '#FFF' }: { size?: number; color?: string }) {
@@ -301,4 +309,6 @@ const styles = StyleSheet.create({
   glowInner: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,180,80,.5)' },
   wave: { flexDirection: 'row', alignItems: 'center' },
   glassButton: { backgroundColor: 'rgba(255,255,255,.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,.1)', borderRadius: 99, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  transcribeBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  transcribeLetter: { fontSize: 11, fontFamily: DESIGN.semibold, fontWeight: '700', lineHeight: 12 },
 });

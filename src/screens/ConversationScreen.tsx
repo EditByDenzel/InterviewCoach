@@ -510,6 +510,7 @@ const styles = StyleSheet.create({
   candidateWaveArea: {
     flex: 1,
     gap: 2,
+    marginRight: 6,
   },
   candidateSizeCaption: {
     fontFamily: DESIGN.font,
@@ -517,14 +518,15 @@ const styles = StyleSheet.create({
     color: 'rgba(254,215,170,0.6)',
   },
   collapseButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(249,115,22,0.2)',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderColor: 'rgba(249,115,22,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
   },
   candidateTranscript: {
     borderTopWidth: 1,

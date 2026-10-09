@@ -65,44 +65,42 @@ export function ConversationSidebar({
   // Find index of most recent non-sample conversation
   const mostRecentId = conversations.find((c) => !c.isSample)?.id || conversations[0]?.id;
 
-  return (
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} accessibilityViewIsModal>
-      <View style={styles.modal}>
-        {/* Dim Backdrop */}
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: '#000',
-              opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.78] }),
-            },
-          ]}
-        >
-          <MotionPressable accessible={false} aria-hidden focusable={false} onPress={onClose} style={StyleSheet.absoluteFill} />
-        </Animated.View>
+  if (!mounted) return null;
 
-        {/* Drawer Container */}
-        <View
-          pointerEvents="box-none"
-          style={styles.bounds}
-        >
-          <Animated.View
-            accessibilityViewIsModal
-            style={[
-              styles.panel,
+  const panelWidth = Math.min(320, window.width * 0.84);
+
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.overlayWrapper]} pointerEvents={open ? 'auto' : 'none'}>
+      {/* Dim Backdrop inside phone frame */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: '#000',
+            opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.72] }),
+          },
+        ]}
+      >
+        <MotionPressable accessible={false} aria-hidden focusable={false} onPress={onClose} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+
+      {/* Drawer Panel inside phone frame */}
+      <Animated.View
+        style={[
+          styles.panel,
+          {
+            width: panelWidth,
+            opacity: reduced ? progress : 1,
+            transform: [
               {
-                width,
-                opacity: reduced ? progress : 1,
-                transform: [
-                  {
-                    translateX: reduced
-                      ? 0
-                      : progress.interpolate({ inputRange: [0, 1], outputRange: [-width, 0] }),
-                  },
-                ],
+                translateX: reduced
+                  ? 0
+                  : progress.interpolate({ inputRange: [0, 1], outputRange: [-panelWidth - 10, 0] }),
               },
-            ]}
-          >
+            ],
+          },
+        ]}
+      >
             <SafeAreaView style={styles.fill} edges={['top', 'bottom']}>
               <View style={styles.header}>
                 <View>
@@ -216,16 +214,20 @@ export function ConversationSidebar({
                 )}
               </ScrollView>
             </SafeAreaView>
-          </Animated.View>
-        </View>
-      </View>
-    </Modal>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: { flex: 1, flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'stretch' },
-  bounds: { height: '100%', position: 'relative', zIndex: 10 },
+  overlayWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
   panel: {
     height: '100%',
     overflow: 'hidden',
