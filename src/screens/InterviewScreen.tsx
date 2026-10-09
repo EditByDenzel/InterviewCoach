@@ -244,7 +244,11 @@ export default function InterviewScreen({ navigation, route }: Props) {
         try {
           if (await requestMicrophonePermission()) {
             await stopCandidate();
-            await startRecording();
+            await startRecording(() => {
+              if (alive.current && !paused && !locked.current) {
+                record();
+              }
+            });
             if (alive.current) {
               setSeconds(0);
               setPhase('recording');
@@ -341,8 +345,11 @@ export default function InterviewScreen({ navigation, route }: Props) {
         if (!(await requestMicrophonePermission()))
           throw new Error('Microphone access is required. Allow it in your device settings or type an answer.');
         ensureActive();
-        await stopCandidate();
-        await startRecording();
+        await startRecording(() => {
+          if (alive.current && !paused && !locked.current) {
+            record();
+          }
+        });
         if (!alive.current) {
           await stopRecording();
           return;
@@ -745,14 +752,13 @@ export default function InterviewScreen({ navigation, route }: Props) {
               {phase === 'transcribing' && renderCandidateCard('Turning your words into text...', rounds.length, true)}
             </ScrollView>
 
-            {/* Anchored Atmospheric Speaker Panel (Physical layout below chat - NEVER overlaps cards) */}
+            {/* Anchored Atmospheric Speaker Panel (Seamless blend - NO dividing border) */}
             <View style={styles.anchoredSpeakerFooter}>
               <LinearGradient
                 pointerEvents="none"
-                colors={['rgba(28,14,8,0.98)', '#100704', '#080302']}
+                colors={['transparent', 'rgba(16,7,4,0.92)', '#0A0402']}
                 style={StyleSheet.absoluteFill}
               />
-              <View style={styles.footerSeparatorGlow} />
 
               <View style={styles.footerInner}>
                 {/* Status Subheader */}
@@ -1159,21 +1165,10 @@ const styles = StyleSheet.create({
   // Floating Atmospheric Footer Bar
   anchoredSpeakerFooter: {
     width: '100%',
-    backgroundColor: '#0D0503',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,112,32,0.18)',
-    paddingTop: 14,
+    paddingTop: 16,
     paddingBottom: Platform.OS === 'ios' ? 24 : 16,
     paddingHorizontal: 16,
     alignItems: 'center',
-  },
-  footerSeparatorGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,112,32,0.3)',
   },
   footerInner: {
     gap: 12,

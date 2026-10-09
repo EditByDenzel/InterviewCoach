@@ -133,13 +133,77 @@ export async function requestMicrophonePermission(): Promise<boolean> {
   return status === 'granted';
 }
 
+let vadInterval: any = null;
+let vadStream: any = null;
+let vadAudioContext: any = null;
+
+function setupWebVAD(onSilenceDetected?: () => void) {
+  if (Platform.OS !== 'web' || !onSilenceDetected) return;
+  try {
+    const AudioContextClass = typeof window !== 'undefined' ? ((window as any).AudioContext || (window as any).webkitAudioContext) : null;
+    if (!AudioContextClass || !navigator?.mediaDevices?.getUserMedia) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      vadStream = stream;
+      vadAudioContext = new AudioContextClass();
+      const source = vadAudioContext.createMediaStreamSource(stream);
+      const analyser = vadAudioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let speechStarted = false;
+      let speechStartTime = 0;
+      let lastSpeechTime = 0;
+
+      vadInterval = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+
+        const now = Date.now();
+        if (avg > 14) {
+          if (!speechStarted) {
+            if (!speechStartTime) speechStartTime = now;
+            else if (now - speechStartTime > 400) {
+              speechStarted = true;
+            }
+          }
+          lastSpeechTime = now;
+        } else {
+          speechStartTime = 0;
+          if (speechStarted && lastSpeechTime > 0 && now - lastSpeechTime > 2300) {
+            cleanUpVAD();
+            onSilenceDetected();
+          }
+        }
+      }, 100);
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function cleanUpVAD() {
+  if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
+  if (vadStream) {
+    try { vadStream.getTracks().forEach((t: any) => t.stop()); } catch (_) {}
+    vadStream = null;
+  }
+  if (vadAudioContext) {
+    try { vadAudioContext.close(); } catch (_) {}
+    vadAudioContext = null;
+  }
+}
+
 /**
  * Start recording user audio.
  * Uses HIGH_QUALITY preset which on Android records as AAC/M4A,
  * on iOS as AAC in M4A container.
+ * Accepts optional onSilenceDetected callback for hands-free conversational flow.
  */
-export async function startRecording(): Promise<void> {
+export async function startRecording(onSilenceDetected?: () => void): Promise<void> {
   if(designPreviewEnabled){fixtureRecording=true;return;}
+  cleanUpVAD();
   if (activeRecording) {
     // Clean up any stale recording
     try {
@@ -154,14 +218,37 @@ export async function startRecording(): Promise<void> {
   await recording.prepareToRecordAsync(
     Audio.RecordingOptionsPresets.HIGH_QUALITY,
   );
+
+  if (Platform.OS !== 'web' && onSilenceDetected) {
+    let speechStarted = false;
+    let lastSpeechTime = 0;
+    recording.setOnRecordingStatusUpdate((status) => {
+      if (!status.isRecording) return;
+      const now = Date.now();
+      const metering = status.metering ?? -160;
+      if (metering > -38) {
+        speechStarted = true;
+        lastSpeechTime = now;
+      } else if (speechStarted && lastSpeechTime > 0 && now - lastSpeechTime > 2300) {
+        recording.setOnRecordingStatusUpdate(null);
+        onSilenceDetected();
+      }
+    });
+  }
+
   await recording.startAsync();
   activeRecording = recording;
+
+  if (Platform.OS === 'web' && onSilenceDetected) {
+    setupWebVAD(onSilenceDetected);
+  }
 }
 
 /**
  * Stop recording and return the local file URI.
  */
 export async function stopRecording(): Promise<string | null> {
+  cleanUpVAD();
   if(designPreviewEnabled){const uri=fixtureRecording?designPreviewRecordingUri:null;fixtureRecording=false;return uri;}
   if (!activeRecording) return null;
 

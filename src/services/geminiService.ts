@@ -57,12 +57,13 @@ export async function generateInterviewText(
     { role: 'user', parts: [{ text: prompt }] },
   ];
 
+  const isClosing = prompt.toLowerCase().includes('closing') || prompt.toLowerCase().includes('summary');
   const body = {
     systemInstruction,
     contents,
     generationConfig: {
-      temperature: 0.8,
-      maxOutputTokens: 300,
+      temperature: 0.7,
+      maxOutputTokens: isClosing ? 260 : 120,
     },
   };
 
@@ -166,7 +167,7 @@ export async function transcribeAudio(
     ],
     generationConfig: {
       temperature: 0,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 300,
     },
   };
 
