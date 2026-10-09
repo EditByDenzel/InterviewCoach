@@ -14,11 +14,11 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, InterviewRound } from '../types';
 import { COLORS } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Summary'>;
+type Props = StackScreenProps<RootStackParamList, 'Summary'>;
 
 export default function SummaryScreen({ navigation, route }: Props) {
   const { rounds, closingMessage, topic } = route.params;

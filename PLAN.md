@@ -46,7 +46,7 @@ These should be checked as soon as the app runs on a real device:
 
 - [ ] **Audio MIME type on Android** — `expo-av` HIGH_QUALITY records as `audio/m4a` on Android but the file extension may vary by device. Confirm `readAudioAsBase64` correctly maps it. May need to force `audio/m4a` regardless of extension.
 - [ ] **Gemini TTS audio format** — The `gemini-3.8-flash-tts` model returns PCM/WAV base64. Confirm the file written is playable by expo-av without needing WAV header injection. If silent: may need to wrap raw PCM bytes in a WAV header (44-byte RIFF header, 24kHz, 16-bit mono).
-- [ ] **`@react-navigation/native-stack` vs `@react-navigation/stack`** — The navigator uses `@react-navigation/stack` but screen props import `NativeStackScreenProps`. Align these — switch navigator to `createNativeStackNavigator` from `@react-navigation/native-stack` (needs separate install) OR change type imports to `StackScreenProps`.
+- [x] **`@react-navigation/native-stack` vs `@react-navigation/stack`** — Fixed! Type imports aligned with `@react-navigation/stack` (`StackScreenProps`), `headerLeft: () => null` configured, TypeScript compiles cleanly with zero errors.
 - [ ] **NativeWind className not applied** — If NativeWind classes don't apply, confirm `nativewind-env.d.ts` is referenced in `tsconfig.json` and `babel.config.js` has the correct preset order.
 - [ ] **`react-native-vector-icons` linking** — May require `npx expo install @expo/vector-icons` instead on Expo managed workflow.
 

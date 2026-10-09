@@ -15,12 +15,12 @@ import {
   SegmentedButtons,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, AppSettings, TTSProvider } from '../types';
 import { loadSettings, saveSettings } from '../store/settingsStore';
 import { COLORS } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+type Props = StackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const theme = useTheme();

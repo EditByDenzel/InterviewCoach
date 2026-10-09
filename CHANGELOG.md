@@ -8,9 +8,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Fixed navigation types: Replaced `@react-navigation/native-stack` imports with `@react-navigation/stack`'s `StackScreenProps` and configured `headerLeft: () => null` in `AppNavigator.tsx`. TypeScript (`tsc --noEmit`) now compiles with zero errors.
+- Added Expo entrypoint registration `registerRootComponent(App)` in `App.tsx` and updated `package.json` main field to `node_modules/expo/AppEntry.js`.
+- Added missing icon and splash assets in `assets/`.
+
 ### Known Issues / P0 Bugs (to verify on first device test)
 - Gemini TTS returns raw PCM — may need WAV header injection if expo-av cannot play it directly
-- Nav type mismatch: `NativeStackScreenProps` used with `@react-navigation/stack` (not `native-stack`) — TypeScript errors expected, runtime may work
 - `react-native-vector-icons` may need replacing with `@expo/vector-icons` in managed Expo workflow
 - Android audio MIME type from expo-av HIGH_QUALITY preset varies by device — confirm `audio/m4a` mapping
 

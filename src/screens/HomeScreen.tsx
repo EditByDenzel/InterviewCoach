@@ -14,12 +14,12 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
 import { loadSettings } from '../store/settingsStore';
 import { COLORS } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+type Props = StackScreenProps<RootStackParamList, 'Home'>;
 
 /** Quick-pick topic suggestions */
 const TOPIC_SUGGESTIONS = [

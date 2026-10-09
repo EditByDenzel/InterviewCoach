@@ -40,7 +40,7 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { StackScreenProps } from '@react-navigation/stack';
 
 import { RootStackParamList, InterviewRound, InterviewPhase } from '../types';
 import { loadSettings } from '../store/settingsStore';
@@ -60,7 +60,7 @@ import {
 } from '../services/audioService';
 import { COLORS } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Interview'>;
+type Props = StackScreenProps<RootStackParamList, 'Interview'>;
 
 const TOTAL_ROUNDS = 5;
 

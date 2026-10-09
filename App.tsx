@@ -4,6 +4,7 @@
 // + GestureHandlerRootView + NavigationContainer (via AppNavigator)
 // ============================================================
 import React from 'react';
+import { registerRootComponent } from 'expo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
@@ -20,3 +21,6 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+registerRootComponent(App);
+

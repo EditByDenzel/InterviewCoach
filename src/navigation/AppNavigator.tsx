@@ -46,7 +46,7 @@ export default function AppNavigator() {
           component={InterviewScreen}
           options={{
             title: 'Live Interview',
-            headerBackVisible: false,
+            headerLeft: () => null,
             gestureEnabled: false,
           }}
         />
@@ -55,7 +55,7 @@ export default function AppNavigator() {
           component={SummaryScreen}
           options={{
             title: 'Session Summary',
-            headerBackVisible: false,
+            headerLeft: () => null,
             gestureEnabled: false,
           }}
         />
