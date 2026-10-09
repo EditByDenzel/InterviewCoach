@@ -51,12 +51,12 @@ These should be checked as soon as the app runs on a real device:
 - [ ] **`react-native-vector-icons` linking** — May require `npx expo install @expo/vector-icons` instead on Expo managed workflow.
 
 ### P1 — High-Value Improvements
-- [ ] **Retry on error per-round** — Currently shows a Retry button but `runRound(currentRound)` may re-use stale state. Add proper state reset.
+- [x] **Retry on error per-round** — Stage-specific retry preserves accepted answers and retries the failed generation, transcription, or playback step.
 - [ ] **Configurable round count** — Let user choose 3, 5, or 10 questions from Home screen.
-- [ ] **Voice selection** — Let user pick from Gemini's available voice names (Kore, Aoede, Charon, Fenrir, Puck, etc.) in Settings.
+- [x] **Voice selection** — 30 searchable Gemini studio voices, including Thai through Gemini 3.8 Flash TTS.
 - [ ] **ElevenLabs voice picker** — Fetch `/v1/voices` and show list.
-- [ ] **Session history** — Persist past sessions to AsyncStorage; show a "History" screen.
-- [ ] **Timer per answer** — Optional countdown showing how long user has spoken.
+- [x] **Session history** — AsyncStorage saves completed and interrupted transcripts; Home sidebar opens a read-only conversation viewer.
+- [x] **Timer per answer** — Elapsed recording time, paused with recording; no countdown limit.
 - [ ] **Score/rating** — After session, AI rates each answer 1–10 and gives specific tips.
 
 ### P2 — Polish
@@ -158,12 +158,14 @@ Body: `{ systemInstruction, contents: [{role, parts:[{text}]}], generationConfig
 
 ### Gemini TTS — `gemini-3.8-flash-tts`
 ```
-POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent?key=KEY
+POST https://generativelanguage.googleapis.com/v1beta/interactions
 ```
-Body: `{ contents: [{parts:[{text}]}], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } }`  
-Response: `candidates[0].content.parts[0].inlineData.data` → base64 WAV/PCM
+Header: `x-goog-api-key: KEY`. Body uses `model`, `input` user text content,
+`response_format: {type:"audio"}`, and `generation_config.speech_config: [{voice:"Kore"}]`.
+Response: last audio block in `steps[].content[].data` → base64 WAV.
 
-Available voices: `Kore`, `Aoede`, `Charon`, `Fenrir`, `Puck`, `Leda`, `Orus`, `Zephyr`
+Available voices: 30 studio voices in Settings. Thai requires Flash TTS;
+Flash-Lite TTS is not offered. See Google's current speech-generation guide.
 
 ### Gemini Transcription — `gemini-3.8-flash` (with audio)
 ```

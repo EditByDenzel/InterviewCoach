@@ -34,7 +34,7 @@ describe('Gemini Service', () => {
         'React Native Engineer',
         [],
         'Start the interview.',
-        'French',
+        'Thai',
       );
 
       expect(result).toBe('Tell me about a challenging project you built.');
@@ -45,7 +45,7 @@ describe('Gemini Service', () => {
 
       const body = JSON.parse(calledOptions.body);
       expect(body.systemInstruction.parts[0].text).toContain('React Native Engineer');
-      expect(body.systemInstruction.parts[0].text).toContain('in French');
+      expect(body.systemInstruction.parts[0].text).toContain('in Thai');
       expect(body.contents).toHaveLength(1);
       expect(body.contents[0].parts[0].text).toBe('Start the interview.');
     });
@@ -64,24 +64,9 @@ describe('Gemini Service', () => {
   });
 
   describe('generateGeminiTTS', () => {
-    it('requests audio modality and Kore voice from gemini-3.8-flash-tts', async () => {
+    it('requests selected studio voice through Gemini 3.8 TTS Interactions', async () => {
       const mockBase64 = 'UklGRi4AAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-      const mockResponse = {
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: 'audio/wav',
-                    data: mockBase64,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
+      const mockResponse = {steps:[{type:'model_output',content:[{type:'audio',mime_type:'audio/wav',data:mockBase64}]}]};
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -92,11 +77,13 @@ describe('Gemini Service', () => {
 
       expect(result).toBe(mockBase64);
       const [calledUrl, calledOptions] = (global.fetch as jest.Mock).mock.calls[0];
-      expect(calledUrl).toContain('gemini-3.8-flash-tts:generateContent?key=mock-api-key');
+      expect(calledUrl).toBe('https://generativelanguage.googleapis.com/v1beta/interactions');
+      expect(calledOptions.headers['x-goog-api-key']).toBe('mock-api-key');
 
       const body = JSON.parse(calledOptions.body);
-      expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
-      expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Puck');
+      expect(body.model).toBe('gemini-3.8-flash-tts');
+      expect(body.response_format).toEqual({type:'audio'});
+      expect(body.generation_config.speech_config[0].voice).toBe('Puck');
     });
   });
 

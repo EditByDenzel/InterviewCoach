@@ -1,10 +1,11 @@
-import React, { PropsWithChildren, useState, useId } from 'react';
-import { View, Text, Pressable, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle } from 'react-native';
+import React, { PropsWithChildren, useState, useId, useEffect, useRef } from 'react';
+import { View, Animated, Easing, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle } from 'react-native';
 import { Asset } from 'expo-asset';
 import { figmaSvg } from './FigmaSvg';
-import Svg, { Defs, RadialGradient, Stop, Rect, Circle, SvgXml } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Stop, Rect, Circle, SvgXml, Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BreathingHalo, MotionPressable, useMotion } from './Motion';
 
 export const DESIGN = {
   text: '#FFFFFF', muted: '#A1A1AA', orange: '#FF5C1C',
@@ -53,7 +54,7 @@ export function DesignFrame({ children, chat = false }: PropsWithChildren<{ chat
   const [bounds, setBounds] = useState({ width: 390, height: chat ? 982 : 874 });
   const wide = Platform.OS === 'web' && window.width > 600;
   return <View style={styles.stage}>
-    <View onLayout={e => setBounds(e.nativeEvent.layout)} style={[styles.frame, wide && { maxWidth: 390, height: Math.min(chat ? 982 : 874, window.height - 48), flex: undefined, marginVertical: 24 }]}>
+    <View onLayout={e => setBounds(e.nativeEvent.layout)} style={[styles.frame, wide && { maxWidth: 390, height: Math.min(900, window.height - 48), flex: undefined, marginVertical: 24 }]}>
       <Svg width={bounds.width} height={bounds.height} style={StyleSheet.absoluteFill}>
         <Defs><RadialGradient id={backdropId} gradientUnits="userSpaceOnUse" cx={0} cy={0} r={10} gradientTransform={`matrix(${chat ? bounds.width * .2864 : bounds.width * .12} 0 0 ${chat ? bounds.width * .2864 : bounds.height * .08} ${bounds.width / 2} ${chat ? -bounds.height * .12 : bounds.height * .18})`}>
           {(chat ? [['0','#E8510C'],['.19','#B13906'],['.38','#7A2100'],['.54','#4A1400'],['.62','#320E00'],['.7','#1A0700'],['.95','#060404']] : [['0','#D74F08'],['.35','#AF3404'],['.525','#762204'],['.7','#3C0F03'],['.85','#250A03'],['1','#0D0402']]).map(([offset,color]) => <Stop key={offset} offset={offset} stopColor={color} />)}
@@ -62,20 +63,8 @@ export function DesignFrame({ children, chat = false }: PropsWithChildren<{ chat
       </Svg>
       {chat && <LinearGradient pointerEvents="none" colors={['transparent','transparent','rgba(0,0,0,.8)']} style={StyleSheet.absoluteFill} />}
       <SafeAreaView style={styles.safe} edges={['top','bottom']}>
-        {Platform.OS === 'web' && <View style={styles.status}>
-          <Text style={styles.time}>9:41</Text>
-          <View style={styles.statusIcons}>
-            <DesignIcon name={chat ? 'chatSignal' : 'homeSignal'} />
-            <DesignIcon name={chat ? 'chatWifi' : 'homeWifi'} />
-            {chat ? <View style={styles.battery}><View style={styles.batteryInner} /></View> : <View style={{ width: 24, height: 12 }}>
-              <View style={{ position: 'absolute', left: 1, top: 1 }}><DesignIcon name="batteryOutline" /></View>
-              <View style={{ position: 'absolute', left: 2.5, top: 2.5 }}><DesignIcon name="batteryFill" /></View>
-              <View style={{ position: 'absolute', left: 22, top: 4.5 }}><DesignIcon name="batteryTip" /></View>
-            </View>}
-          </View>
-        </View>}
         {children}
-        {Platform.OS === 'web' && <View style={styles.homeIndicator}><View style={styles.homePill} /></View>}
+
       </SafeAreaView>
     </View>
   </View>;
@@ -86,21 +75,37 @@ export function Orb() {
   return <View style={styles.orb}><Svg width={28} height={28}><Defs><RadialGradient id={orbId} cx="35%" cy="30%" r="95%"><Stop offset="0" stopColor="#FFE29F"/><Stop offset=".3" stopColor="#FF9036"/><Stop offset=".6" stopColor="#D84200"/><Stop offset="1" stopColor="#200400"/></RadialGradient></Defs><Circle cx={14} cy={14} r={14} fill={`url(#${orbId})`} /></Svg></View>;
 }
 
-export function GlowButton({ onPress, disabled, recording, size = 68, home = false }: { onPress: () => void; disabled?: boolean; recording?: boolean; size?: number; home?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={home ? 'Start interview' : recording ? 'Stop recording and submit answer' : 'Record answer'} disabled={disabled} onPress={onPress} style={({pressed})=>[{ width:size, height:size, borderRadius:size/2, opacity: disabled ? .45 : pressed ? .8 : 1 }, !home && styles.glow]}>
+export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?:boolean; size?: number; home?: boolean }) {
+  return <BreathingHalo size={size} active={!disabled&&!paused} recording={recording}><MotionPressable accessibilityRole="button" accessibilityLabel={home ? 'Start interview' : recording ? 'Stop recording and submit answer' : 'Record answer'} disabled={disabled} onPress={onPress} style={[{ width:size, height:size, borderRadius:size/2 }, !home && styles.glow]}>
     <LinearGradient colors={['#FFA742','#FF6220','#C93300']} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.glowInner, {borderRadius:size/2}]}>
       <DesignIcon name={home ? 'homeMic' : 'mic'} />
     </LinearGradient>
-  </Pressable>;
+  </MotionPressable></BreathingHalo>;
 }
 
-export function Waveform({ candidate = false }: { candidate?: boolean }) {
-  const heights = candidate ? [6,12,16,20,12,16,20,10,12,16,20,8,12,12,6,12,16,8] : [8,14,20,16,8,20,24,12,16,20,10,16,24,12,8];
-  return <View style={[styles.wave, {height:candidate ? 20 : 24}]}>{heights.map((height,i)=><View key={i} style={{ width:candidate ? 2 : 2.5, height, borderRadius:2, backgroundColor: i < 8 ? '#FB923C' : '#71717A', marginRight:candidate ? 2 : 2.5 }} />)}</View>;
+export function Waveform({ candidate = false, active=false, progress=0 }: { candidate?: boolean;active?:boolean;progress?:number }) {
+  const {reduced}=useMotion();
+  const [width,setWidth]=useState(120);
+  const pulse=useRef(new Animated.Value(0)).current;
+  useEffect(()=>{
+    pulse.setValue(0);
+    if(!active||reduced)return;
+    const animation=Animated.loop(Animated.sequence([Animated.timing(pulse,{toValue:1,duration:480,easing:Easing.inOut(Easing.sin),useNativeDriver:Platform.OS!=='web',isInteraction:false}),Animated.timing(pulse,{toValue:0,duration:480,easing:Easing.inOut(Easing.sin),useNativeDriver:Platform.OS!=='web',isInteraction:false})]));
+    animation.start();return()=>animation.stop();
+  },[active,reduced,pulse]);
+  const count=Math.max(8,Math.floor(width/5));
+  return <View testID="audio-waveform" accessible={false} onLayout={event=>setWidth(event.nativeEvent.layout.width)} style={[styles.wave,{height:26,justifyContent:'space-between',overflow:'hidden'}]}>{Array.from({length:count},(_,i)=>{
+    const height=5+((i*7+(candidate?3:0))%20);
+    return <Animated.View key={i} style={{width:2,height,borderRadius:2,backgroundColor:(i+1)/count<=progress?'#FB923C':'#88796F',transform:[{scaleY:active&&!reduced?pulse.interpolate({inputRange:[0,.5,1],outputRange:i%3===0?[.45,1.2,.7]:i%3===1?[1,.5,1.15]:[.7,1.1,.4]}):1}]}}/>;
+  })}</View>;
+}
+
+export function TranscriptionIcon({open=false}:{open?:boolean}) {
+  return <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={open?'#FFAB72':'#D8C3B5'} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><Path d="M3 12h7m-3-3 3 3-3 3m6 3 4-12 4 12m-6.5-4h5"/></Svg>;
 }
 
 export function GlassButton({children, onPress, label, style, disabled}: PropsWithChildren<{onPress:()=>void;label:string;style?:StyleProp<ViewStyle>;disabled?:boolean}>) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={({pressed})=>[styles.glassButton,style,{opacity:disabled ? .35 : pressed ? .7 : 1}]}>{children}</Pressable>;
+  return <MotionPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={[styles.glassButton,style]}>{children}</MotionPressable>;
 }
 
 const styles = StyleSheet.create({

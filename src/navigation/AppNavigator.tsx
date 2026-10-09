@@ -7,6 +7,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from 'react-native-paper';
+import { easeOut, useMotion } from '../components/Motion';
+import ConversationScreen from '../screens/ConversationScreen';
 
 import { RootStackParamList } from '../types';
 import HomeScreen from '../screens/HomeScreen';
@@ -18,6 +20,7 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   const theme = useTheme();
+  const {reduced}=useMotion();
 
   return (
     <NavigationContainer>
@@ -35,6 +38,9 @@ export default function AppNavigator() {
           cardStyle: { backgroundColor: theme.colors.background },
           headerShadowVisible: false,
           headerShown: false,
+          animationEnabled: !reduced,
+          transitionSpec: {open:{animation:'timing',config:{duration:240,easing:easeOut}},close:{animation:'timing',config:{duration:180,easing:easeOut}}},
+          cardStyleInterpolator: ({current})=>({cardStyle:{opacity:current.progress,transform:[{translateX:current.progress.interpolate({inputRange:[0,1],outputRange:[reduced?0:24,0]})}]}}),
         }}
       >
         <Stack.Screen
@@ -67,6 +73,7 @@ export default function AppNavigator() {
           options={{ title: 'Settings' }}
         />
         <Stack.Screen name="Preferences" component={PreferencesScreen} />
+        <Stack.Screen name="Conversation" component={ConversationScreen} options={{title:'Saved conversation'}}/>
       </Stack.Navigator>
     </NavigationContainer>
   );

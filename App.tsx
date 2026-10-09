@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AppTheme } from './src/theme';
 import { useFonts } from 'expo-font';
+import { MotionProvider } from './src/components/Motion';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ Inter_400Regular: require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'), Inter_500Medium: require('@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf'), Inter_600SemiBold: require('@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf') });
@@ -18,7 +19,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PaperProvider theme={AppTheme}>
         <StatusBar style="light" backgroundColor={AppTheme.colors.background} />
-        <AppNavigator />
+        <MotionProvider><AppNavigator /></MotionProvider>
       </PaperProvider>
     </GestureHandlerRootView>
   );

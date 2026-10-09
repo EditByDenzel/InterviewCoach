@@ -1,5 +1,5 @@
 // Explicit development-only fixture. No private keys or external API calls.
-// Use typed answers for the demo; recording still uses the real microphone.
+// Audio capture is simulated only in this explicit fixture; no microphone access.
 export const designPreviewEnabled = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_COACHIE_DESIGN_PREVIEW === '1';
 let questionIndex = 0;
 const questions = [
@@ -11,11 +11,14 @@ const questions = [
 ];
 // Short valid 24 kHz mono WAV so the real browser playback path is exercised.
 const silentWav = 'UklGRuQSAABXQVZFZm10IBAAAAABAAEAwF0AAIC7AAACABAAZGF0YcASAAAA' + 'A'.repeat(6399) + '=';
+export const designPreviewRecordingUri=`data:audio/wav;base64,${silentWav}`;
 export async function designPreviewFetch(input: string, init?: RequestInit): Promise<Response> {
   if (!designPreviewEnabled) return fetch(input,init);
+  // Leave enough time to inspect processing indicators, without real API traffic.
+  await new Promise(resolve=>setTimeout(resolve,600));
   const body = JSON.parse(String(init?.body ?? '{}'));
   if (body.contents?.length === 1 && body.contents[0].parts?.[0]?.text?.startsWith('Start the interview.')) questionIndex = 0;
-  if (input.includes('-tts:')) return new Response(JSON.stringify({candidates:[{content:{parts:[{inlineData:{data:silentWav,mimeType:'audio/wav'}}]}}]}),{status:200});
+  if (body.model?.includes('-tts')) return new Response(JSON.stringify({steps:[{type:'model_output',content:[{type:'audio',data:silentWav,mime_type:'audio/wav'}]}]}),{status:200});
   const text = body.contents?.some((c: any)=>c.parts?.some((p:any)=>p.inlineData))
     ? 'JSI provides direct synchronous C++ object references to JavaScript runtimes, bypassing the asynchronous JSON stringification queue entirely.'
     : questionIndex < questions.length ? questions[questionIndex++] : 'You gave clear and thoughtful answers. Keep supporting your design decisions with concrete examples and measurable outcomes.';

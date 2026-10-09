@@ -20,6 +20,37 @@ The development-only design fixture replaces Gemini requests when explicitly
 enabled; it cannot run in production. It stores demo preferences in memory and
 blocks ElevenLabs requests. Normal operation uses real providers.
 
+`Motion.tsx` centralizes reduced-motion/fine-pointer preferences, press/hover
+feedback, screen/message entrance, transcript height reveals, loading dots, and
+the breathing mic halo. `TopicComposer.tsx` measures the real web textarea and
+uses native content-size events; the 180ms height transition has a bounded
+seven-line viewport. `ConversationSidebar.tsx` animates a modal drawer, with
+Escape/close handling and the background hidden from assistive technology.
+The fake device status bar and home indicator are no longer rendered.
+
+`conversationStore.ts` stores sessions at `@coachie_conversations_v1`, serializes
+read/modify/write operations, and preserves corrupt storage for recovery rather
+than overwriting it. Interview saves the settings snapshot, each question,
+each accepted answer before requesting the next question, feedback, and on exit.
+Storage failure shows a warning without blocking practice. `ConversationScreen`
+reopens text/feedback only; recorded audio remains temporary and is not persisted.
+
+Audio rows use responsive stylized bars, actual expo-av playback position and
+duration callbacks, stop/play controls, and transcript toggles. Pending recorded
+answers show animated waveform/dots during transcription. Mic breathing is
+disabled while paused, unavailable, or under reduced-motion preferences.
+The explicit development fixture simulates microphone capture and Gemini calls;
+real recording/playback APIs remain active in normal mode.
+
+Thai selects Gemini 3.8 Flash TTS. The searchable catalog includes 30 studio
+voices. The current ElevenLabs multilingual_v2 engine is unavailable for Thai.
+Gemini TTS now POSTs to `/v1beta/interactions` with `x-goog-api-key`,
+`response_format: {type:'audio'}`, a `user_input` text content block, and
+`generation_config.speech_config: [{voice:voiceName}]`. The last audio content
+in model-output steps is returned as base64 WAV. Text generation/transcription
+continue using generateContent. Source: Google's speech-generation guide,
+checked 9 October 2026. Older endpoint examples below are historical.
+
 ## Stack Overview
 
 ```

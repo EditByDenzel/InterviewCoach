@@ -8,6 +8,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fluid conversations and saved history
+- Replaced the large Home CTA with a multiline composer, inline send, keyboard
+  submission, animated height, long-word wrapping, and hidden scrollbar chrome.
+- Added recent-conversation sidebar and a persisted full transcript viewer for
+  completed and unfinished interviews. Saves happen before the next API request.
+- Coachie logo opens Settings; removed fake 9:41, signal/battery, and home chrome.
+- Added screen/drawer/message transitions, hover/press/focus feedback, reduced
+  motion support, breathing mic halos, and animated processing indicators.
+- Audio waveforms fill the row, animate during playback/transcription, and show
+  real playback progress. Telegram-style transcript controls reveal/collapse text.
+- Added Thai and 30 searchable Gemini studio voices. Thai uses Flash TTS;
+  the current ElevenLabs multilingual_v2 engine is disabled for Thai.
+- Updated Gemini 3.8 TTS requests to the documented Interactions API/WAV schema.
+- Save actions stay visible beneath long language/voice settings lists.
+- Development fixture now simulates capture as well as API responses; no real
+  microphone or provider credentials are needed to inspect its processing states.
+- Verified 15 unit tests, TypeScript, all-platform exports, responsive composer,
+  five-round fixture flow, transcription/replay UI, and reload-persistent history.
+  Real hardware and live paid provider calls remain unverified.
+
 ### Coachie design refresh
 - Rebuilt Home and the five-round interview around the selected Figma screens.
 - Added an explicit Start conversation button and consistent gradients within home cards.

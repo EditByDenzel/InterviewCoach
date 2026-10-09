@@ -28,6 +28,19 @@ export interface InterviewRound {
   roundNumber: number;
 }
 
+export interface SavedConversation {
+  id: string;
+  topic: string;
+  createdAt: string;
+  updatedAt: string;
+  rounds: InterviewRound[];
+  currentQuestion: string;
+  closingMessage: string;
+  status: 'in_progress' | 'completed';
+  language: string;
+  voice: string;
+}
+
 /** State phases of the interview */
 export type InterviewPhase =
   | 'idle'
@@ -40,9 +53,10 @@ export type InterviewPhase =
 
 /** Navigation param list */
 export type RootStackParamList = {
-  Home: undefined;
+  Home: { topic?: string } | undefined;
   Interview: { topic: string };
-  Summary: { rounds: InterviewRound[]; closingMessage: string; topic: string };
+  Summary: { rounds: InterviewRound[]; closingMessage: string; topic: string; saveWarning?: string };
   Settings: undefined;
   Preferences: { page: 'language' | 'voice' | 'keys' | 'about' };
+  Conversation: { id: string };
 };

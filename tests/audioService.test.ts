@@ -41,6 +41,18 @@ describe('Interview audio controls',()=>{
     expect(mockRecording.pauseAsync).toHaveBeenCalledTimes(1);expect(mockRecording.startAsync).toHaveBeenCalledTimes(2);
     expect(await stopRecording()).toBe('file:///answer.m4a');expect(await stopRecording()).toBeNull();
   });
+  it('reports actual playback position and duration to the waveform',async()=>{
+    const progress=jest.fn();
+    const playback=playBase64Audio('audio','wav',progress);
+    for(let i=0;i<15;i++)await Promise.resolve();
+    const listener=mockSound.setOnPlaybackStatusUpdate.mock.calls.find(call=>typeof call[0]==='function')?.[0];
+    listener({isLoaded:true,positionMillis:750,durationMillis:3000,didJustFinish:false});
+    expect(progress).toHaveBeenCalledWith(750,3000);
+    listener({isLoaded:false});
+    expect(progress).toHaveBeenCalledTimes(1);
+    await stopPlayback();await playback;
+    expect(mockSound.setOnPlaybackStatusUpdate).toHaveBeenLastCalledWith(null);
+  });
   it('releases playback on a device playback error',async()=>{
     const {playback}=await startPlayback();
     const rejected=expect(playback).rejects.toThrow('Invalid audio');

@@ -9,6 +9,7 @@
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
+import { designPreviewEnabled, designPreviewRecordingUri } from '../dev/designPreview';
 
 let activeSound: Audio.Sound | null = null;
 let finishPlayback: (() => void) | null = null;
@@ -69,6 +70,7 @@ export async function setRecordingMode(): Promise<void> {
 export async function playBase64Audio(
   base64Audio: string,
   extension: 'wav' | 'mp3' = 'wav',
+  onProgress?: (positionMillis:number,durationMillis:number)=>void,
 ): Promise<void> {
   await stopPlayback();
   const generation = playbackGeneration;
@@ -83,7 +85,7 @@ export async function playBase64Audio(
 
   const { sound } = await Audio.Sound.createAsync(
     { uri: Platform.OS === 'web' ? `data:audio/${extension === 'mp3' ? 'mpeg' : 'wav'};base64,${base64Audio}` : uri },
-    { shouldPlay: true, volume: 1.0, isMuted: playbackMuted },
+    { shouldPlay: true, volume: 1.0, isMuted: playbackMuted, progressUpdateIntervalMillis:100 },
   );
   if (generation !== playbackGeneration) { await sound.unloadAsync(); return; }
   activeSound = sound;
@@ -100,6 +102,7 @@ export async function playBase64Audio(
     finishPlayback = () => { clearTimeout(timeout); sound.setOnPlaybackStatusUpdate(null); resolve(); };
     sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
       if (!status.isLoaded) { if(status.error) finish(new Error(status.error)); return; }
+      onProgress?.(status.positionMillis,status.durationMillis??0);
       if (status.didJustFinish) finish();
     });
   });
@@ -108,12 +111,15 @@ export async function playBase64Audio(
 // --------------- Recording --------------------------------
 
 let activeRecording: Audio.Recording | null = null;
+let fixtureRecording=false;
 
 export async function pauseRecording(): Promise<void> {
+  if(designPreviewEnabled)return;
   await activeRecording?.pauseAsync();
 }
 
 export async function resumeRecording(): Promise<void> {
+  if(designPreviewEnabled)return;
   await activeRecording?.startAsync();
 }
 
@@ -122,6 +128,7 @@ export async function resumeRecording(): Promise<void> {
  * Returns true if granted, false otherwise.
  */
 export async function requestMicrophonePermission(): Promise<boolean> {
+  if(designPreviewEnabled)return true;
   const { status } = await Audio.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -132,6 +139,7 @@ export async function requestMicrophonePermission(): Promise<boolean> {
  * on iOS as AAC in M4A container.
  */
 export async function startRecording(): Promise<void> {
+  if(designPreviewEnabled){fixtureRecording=true;return;}
   if (activeRecording) {
     // Clean up any stale recording
     try {
@@ -154,6 +162,7 @@ export async function startRecording(): Promise<void> {
  * Stop recording and return the local file URI.
  */
 export async function stopRecording(): Promise<string | null> {
+  if(designPreviewEnabled){const uri=fixtureRecording?designPreviewRecordingUri:null;fixtureRecording=false;return uri;}
   if (!activeRecording) return null;
 
   await activeRecording.stopAndUnloadAsync();
@@ -192,7 +201,7 @@ export async function readAudioAsBase64(
     mp4: 'audio/mp4',
     caf: 'audio/x-caf',
   };
-  const mimeType = Platform.OS === 'web' ? 'audio/webm' : mimeMap[ext] ?? 'audio/m4a';
+  const mimeType = uri.startsWith('data:audio/wav')?'audio/wav':Platform.OS === 'web' ? 'audio/webm' : mimeMap[ext] ?? 'audio/m4a';
 
   return { base64, mimeType };
 }

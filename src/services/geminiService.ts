@@ -101,23 +101,16 @@ export async function generateGeminiTTS(
   text: string,
   voiceName: string = 'Kore',
 ): Promise<string> {
-  const url = `${GEMINI_BASE}/${TTS_MODEL}:generateContent?key=${apiKey}`;
-
+  const url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
   const body = {
-    contents: [{ parts: [{ text }] }],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName },
-        },
-      },
-    },
+    model: TTS_MODEL,
+    input: [{type:'user_input',content:[{type:'text',text,annotations:[{type:'speech_metadata',style:'Speak clearly and naturally at a comfortable conversational pace.'}]}]}],
+    response_format: {type:'audio'},
+    generation_config: {speech_config:[{voice:voiceName}]},
   };
-
   const res = await designPreviewFetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body),
   });
 
@@ -127,8 +120,8 @@ export async function generateGeminiTTS(
   }
 
   const json = await res.json();
-  const base64Audio: string | undefined =
-    json?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  const audioParts = (json.steps ?? []).filter((step:any)=>step.type==='model_output').flatMap((step:any)=>step.content ?? []).filter((part:any)=>part.type==='audio');
+  const base64Audio: string | undefined = audioParts[audioParts.length-1]?.data;
 
   if (!base64Audio) {
     throw new Error('Gemini TTS returned no audio data');
