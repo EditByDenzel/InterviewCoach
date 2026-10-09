@@ -7,9 +7,11 @@ import { designPreviewEnabled } from '../dev/designPreview';
 
 const SETTINGS_KEY = '@interview_coach_settings';
 
+const getEnvApiKey = () => (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+
 /** Default settings (can be pre-seeded by local .env file) */
 const DEFAULT_SETTINGS: AppSettings = {
-  geminiApiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || '',
+  geminiApiKey: getEnvApiKey(),
   elevenLabsApiKey: '',
   ttsProvider: 'gemini',
   language: 'English',
@@ -24,14 +26,20 @@ let previewSettings = { ...DEFAULT_SETTINGS, geminiApiKey: 'design-preview-fixtu
  */
 export async function loadSettings(): Promise<AppSettings> {
   if (designPreviewEnabled) return { ...previewSettings };
+  const envKey = getEnvApiKey();
   try {
     const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    if (!raw) return { ...DEFAULT_SETTINGS, geminiApiKey: envKey };
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      // If parsed key is blank or empty, use the env key when available
+      geminiApiKey: (parsed.geminiApiKey && parsed.geminiApiKey.trim()) || envKey,
+    };
   } catch (err) {
     console.warn('[settingsStore] Failed to load settings:', err);
-    return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, geminiApiKey: envKey };
   }
 }
 
