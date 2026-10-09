@@ -23,22 +23,22 @@ function sample(id: string, topic: string, pairs: [string, string][], feedback: 
 export const sampleConversations: SavedConversation[] = [
   sample(
     'mock-interview',
-    'Mock Interview Prep Session',
+    'Deploy an autonomous AI agent to monitor liquidity pools. Make it a tactical trading bot.',
     [
       [
-        'Tell me about yourself and the role you are looking for.',
-        'I am a frontend engineer who enjoys making complex workflows easy to use. I recently built an interview practice tool and would like a role where I can own the experience from prototype to release.',
+        'Deployed AlphaRaptor.sh to your agent network. The automation loop is active. Need to configure risk mitigation parameters? How do you handle synchronous C++ object lifetime management and prevent memory leakage during volatile trade streaming?',
+        'JSI provides direct synchronous C++ object references to JavaScript runtimes, bypassing the asynchronous JSON stringification queue entirely.',
       ],
       [
-        'What project best demonstrates how you work?',
-        'I redesigned a support dashboard after watching agents use it. I grouped the actions around their most common task, tested a prototype with five agents, and shipped it in small steps. Average handling time fell by 18%.',
+        'How would you manage backpressure and failover if the liquidity pool websocket connection drops under peak volume?',
+        'I would implement a ring buffer with ring-drop semantics for stale ticks, while a dedicated health watchdog triggers exponential backoff reconnects to secondary RPC endpoints.',
       ],
       [
-        'What would you like to improve in your next role?',
-        'I want to get better at explaining tradeoffs early. I now write a short decision note before implementation, ask for feedback, and revisit the result after launch.',
+        'What safeguard prevents rogue automated orders during severe slippage or flash crashes?',
+        'A circuit breaker inspects the spread and local volatility threshold before signing any transaction payload. If slippage exceeds 1.5%, the execution engine immediately halts order dispatch.',
       ],
     ],
-    'You connected your experience to the role and used a measurable example. Keep your opening focused on the two strengths most relevant to the position, then invite a follow-up.'
+    'Exceptional technical depth. You articulated low-level JSI runtime guarantees and resilient backpressure strategies with clarity and poise.'
   ),
   sample(
     'architecture',

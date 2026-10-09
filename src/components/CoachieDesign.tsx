@@ -77,50 +77,109 @@ export function DesignFrame({ children, chat = false }: PropsWithChildren<{ chat
   </View>;
 }
 
-export function Orb() {
-  const orbId = `orb${useId().replace(/:/g,'')}`;
-  return <View style={styles.orb}><Svg width={28} height={28}><Defs><RadialGradient id={orbId} cx="35%" cy="30%" r="95%"><Stop offset="0" stopColor="#FFE29F"/><Stop offset=".3" stopColor="#FF9036"/><Stop offset=".6" stopColor="#D84200"/><Stop offset="1" stopColor="#200400"/></RadialGradient></Defs><Circle cx={14} cy={14} r={14} fill={`url(#${orbId})`} /></Svg></View>;
+export function Orb({ size = 28 }: { size?: number }) {
+  return <View style={[styles.orb, { width: size, height: size, borderRadius: size / 2 }]}>
+    <Image source={require('../../assets/figma/mini_orb.png')} style={{ width: size, height: size }} resizeMode="contain" />
+  </View>;
 }
 
-export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?:boolean; size?: number; home?: boolean }) {
-  return <BreathingHalo size={size} active={!disabled&&!paused} recording={recording}><MotionPressable accessibilityRole="button" accessibilityLabel={home ? 'Start interview' : recording ? 'Stop recording and submit answer' : 'Record answer'} disabled={disabled} onPress={onPress} style={[{ width:size, height:size, borderRadius:size/2 }, !home && styles.glow]}>
-    <LinearGradient colors={['#FFA742','#FF6220','#C93300']} start={{x:0,y:0}} end={{x:1,y:1}} style={[styles.glowInner, {borderRadius:size/2}]}>
-      <DesignIcon name={home ? 'homeMic' : 'mic'} />
-    </LinearGradient>
-  </MotionPressable></BreathingHalo>;
+export function HeroOrb({ size = 176 }: { size?: number }) {
+  const { reduced } = useMotion();
+  const float = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, { toValue: 1, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(float, { toValue: 0, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web' }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [float, reduced]);
+
+  const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
+  const scale = float.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.025, 1] });
+
+  return <View style={[styles.heroOrbContainer, { width: size, height: size }]}>
+    <View style={[styles.heroOrbGlow, { width: size * 1.4, height: size * 1.4, borderRadius: (size * 1.4) / 2 }]} />
+    <Animated.Image
+      source={require('../../assets/figma/hero_orb.png')}
+      style={[{ width: size, height: size, transform: [{ translateY }, { scale }] }]}
+      resizeMode="contain"
+    />
+  </View>;
 }
 
-export function Waveform({ candidate = false, active=false, progress=0 }: { candidate?: boolean;active?:boolean;progress?:number }) {
-  const {reduced}=useMotion();
-  const [width,setWidth]=useState(120);
-  const pulse=useRef(new Animated.Value(0)).current;
-  useEffect(()=>{
+export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?: boolean; size?: number; home?: boolean }) {
+  const haloSize = size + 24;
+  return <BreathingHalo size={haloSize} active={!disabled && !paused} recording={recording}>
+    <MotionPressable accessibilityRole="button" accessibilityLabel={home ? 'Start interview' : recording ? 'Stop recording and submit answer' : 'Record answer'} disabled={disabled} onPress={onPress} style={[{ width: size, height: size, borderRadius: size / 2 }, !home && styles.glow]}>
+      <LinearGradient colors={['#E03A00', '#FF621E', '#FFA742']} start={{ x: 0, y: 1 }} end={{ x: 0, y: 0 }} style={[styles.glowInner, { borderRadius: size / 2 }]}>
+        <DesignIcon name={home ? 'homeMic' : 'mic'} />
+      </LinearGradient>
+    </MotionPressable>
+  </BreathingHalo>;
+}
+
+const AI_WAVE_HEIGHTS = [8, 14, 20, 16, 8, 20, 24, 12, 16, 20, 10, 16, 24, 12, 8];
+const CANDIDATE_WAVE_HEIGHTS = [6, 12, 16, 20, 12, 16, 20, 10, 12, 16, 20, 8, 12, 12, 6, 12, 16, 8];
+
+export function Waveform({ candidate = false, active = false, progress = 0 }: { candidate?: boolean; active?: boolean; progress?: number }) {
+  const { reduced } = useMotion();
+  const heights = candidate ? CANDIDATE_WAVE_HEIGHTS : AI_WAVE_HEIGHTS;
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
     pulse.setValue(0);
-    if(!active||reduced)return;
-    const animation=Animated.loop(Animated.sequence([Animated.timing(pulse,{toValue:1,duration:480,easing:Easing.inOut(Easing.sin),useNativeDriver:Platform.OS!=='web',isInteraction:false}),Animated.timing(pulse,{toValue:0,duration:480,easing:Easing.inOut(Easing.sin),useNativeDriver:Platform.OS!=='web',isInteraction:false})]));
-    animation.start();return()=>animation.stop();
-  },[active,reduced,pulse]);
-  const count=Math.max(8,Math.floor(width/5));
-  return <View testID="audio-waveform" accessible={false} onLayout={event=>setWidth(event.nativeEvent.layout.width)} style={[styles.wave,{height:26,justifyContent:'space-between',overflow:'hidden'}]}>{Array.from({length:count},(_,i)=>{
-    const height=5+((i*7+(candidate?3:0))%20);
-    return <Animated.View key={i} style={{width:2,height,borderRadius:2,backgroundColor:(i+1)/count<=progress?'#FB923C':'#88796F',transform:[{scaleY:active&&!reduced?pulse.interpolate({inputRange:[0,.5,1],outputRange:i%3===0?[.45,1.2,.7]:i%3===1?[1,.5,1.15]:[.7,1.1,.4]}):1}]}}/>;
+    if (!active || reduced) return;
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
+      Animated.timing(pulse, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false })
+    ]));
+    animation.start(); return () => animation.stop();
+  }, [active, reduced, pulse]);
+
+  const count = heights.length;
+  return <View testID="audio-waveform" accessible={false} style={[styles.wave, { height: 26, gap: candidate ? 4 : 5 }]}>{heights.map((baseH, i) => {
+    const isPlayed = progress > 0 ? (i + 1) / count <= progress : active;
+    const activeColor = '#FB923C';
+    const inactiveColor = candidate ? 'rgba(251,146,60,0.5)' : '#52525B';
+    const barColor = isPlayed ? activeColor : inactiveColor;
+    return <Animated.View key={i} style={{
+      width: 2, height: baseH, borderRadius: 2, backgroundColor: barColor,
+      transform: [{ scaleY: active && !reduced ? pulse.interpolate({
+        inputRange: [0, 0.5, 1],
+        outputRange: i % 3 === 0 ? [0.6, 1.25, 0.8] : i % 3 === 1 ? [1.1, 0.65, 1.2] : [0.8, 1.2, 0.6]
+      }) : 1 }]
+    }} />;
   })}</View>;
 }
 
-export function TranscriptionIcon({open=false}:{open?:boolean}) {
-  return <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={open?'#FFAB72':'#D8C3B5'} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><Path d="M3 12h7m-3-3 3 3-3 3m6 3 4-12 4 12m-6.5-4h5"/></Svg>;
+export function TranscriptionIcon({ open = false }: { open?: boolean }) {
+  return <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={open ? '#FFAB72' : '#D8C3B5'} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><Path d="M3 12h7m-3-3 3 3-3 3m6 3 4-12 4 12m-6.5-4h5" /></Svg>;
 }
 
-export function GlassButton({children, onPress, label, style, disabled}: PropsWithChildren<{onPress:()=>void;label:string;style?:StyleProp<ViewStyle>;disabled?:boolean}>) {
-  return <MotionPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={[styles.glassButton,style]}>{children}</MotionPressable>;
+export function GlassButton({ children, onPress, label, style, disabled }: PropsWithChildren<{ onPress: () => void; label: string; style?: StyleProp<ViewStyle>; disabled?: boolean }>) {
+  return <MotionPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={[styles.glassButton, style]}>{children}</MotionPressable>;
 }
 
 const styles = StyleSheet.create({
-  stage:{flex:1,backgroundColor:'#100A07',alignItems:'center'},frame:{flex:1,width:'100%',overflow:'hidden',backgroundColor:'#0D0402'},safe:{flex:1},
-  status:{height:40,paddingHorizontal:24,paddingTop:12,flexDirection:'row',justifyContent:'space-between'},time:{color:'#FFF',fontSize:15,fontWeight:'700'},statusIcons:{flexDirection:'row',alignItems:'center',gap:6,height:16},
-  battery:{width:20,height:10,borderWidth:1,borderColor:'rgba(255,255,255,.7)',borderRadius:3,padding:2},batteryInner:{flex:1,backgroundColor:'#FFF',borderRadius:1.5},
-  homeIndicator:{height:18,alignItems:'center',justifyContent:'center'},homePill:{width:136,height:4.5,borderRadius:99,backgroundColor:'rgba(255,255,255,.45)'},
-  orb:{width:28,height:28,borderRadius:14,shadowColor:'#FF6E1E',shadowOpacity:.6,shadowRadius:14,shadowOffset:{width:0,height:0}},
-  glow:{shadowColor:'#FF5A14',shadowOffset:{width:0,height:0},shadowRadius:20,shadowOpacity:.8,elevation:8},glowInner:{flex:1,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'rgba(255,180,80,.5)'},
-  wave:{flexDirection:'row',alignItems:'center',flex:1},glassButton:{backgroundColor:'rgba(255,255,255,.1)',borderWidth:1,borderColor:'rgba(255,255,255,.1)',borderRadius:99,alignItems:'center',justifyContent:'center',flexDirection:'row',gap:6},
+  stage: { flex: 1, backgroundColor: '#100A07', alignItems: 'center' },
+  frame: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: '#0D0402' },
+  safe: { flex: 1 },
+  status: { height: 40, paddingHorizontal: 24, paddingTop: 12, flexDirection: 'row', justifyContent: 'space-between' },
+  time: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  statusIcons: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 16 },
+  battery: { width: 20, height: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,.7)', borderRadius: 3, padding: 2 },
+  batteryInner: { flex: 1, backgroundColor: '#FFF', borderRadius: 1.5 },
+  homeIndicator: { height: 18, alignItems: 'center', justifyContent: 'center' },
+  homePill: { width: 136, height: 4.5, borderRadius: 99, backgroundColor: 'rgba(255,255,255,.45)' },
+  orb: { width: 28, height: 28, borderRadius: 14, shadowColor: '#FF6E1E', shadowOpacity: 0.6, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
+  heroOrbContainer: { alignItems: 'center', justifyContent: 'center' },
+  heroOrbGlow: { position: 'absolute', backgroundColor: 'rgba(255,92,28,0.28)', shadowColor: '#FF5C1C', shadowRadius: 45, shadowOpacity: 0.9, shadowOffset: { width: 0, height: 0 }, elevation: 12 },
+  heroOrbImage: { width: 176, height: 176 },
+  glow: { shadowColor: '#FF5A14', shadowOffset: { width: 0, height: 0 }, shadowRadius: 20, shadowOpacity: 0.8, elevation: 8 },
+  glowInner: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,180,80,.5)' },
+  wave: { flexDirection: 'row', alignItems: 'center' },
+  glassButton: { backgroundColor: 'rgba(255,255,255,.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,.1)', borderRadius: 99, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
 });

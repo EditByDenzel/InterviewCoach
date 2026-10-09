@@ -13,7 +13,7 @@ import { ConversationSidebar } from '../components/ConversationSidebar';
 
 type Props = StackScreenProps<RootStackParamList, 'Home'>;
 const suggestions = [
- {id:'sample-mock-interview',label:'Mock Interview\nPrep Session',topic:'Mock Interview Prep Session',rounds:3,icon:'interview' as const},
+ {id:'sample-mock-interview',label:'Deploy Autonomous\nAI Agent',topic:'Deploy an autonomous AI agent to monitor liquidity pools. Make it a tactical trading bot.',rounds:3,icon:'interview' as const},
  {id:'sample-architecture',label:'System\nArchitecture\nReview',topic:'System Architecture Review',rounds:4,icon:'architecture' as const},
  {id:'sample-behavioral',label:'Behavioral STAR\nFramework',topic:'Behavioral STAR Framework',rounds:5,icon:'architecture' as const},
 ];
