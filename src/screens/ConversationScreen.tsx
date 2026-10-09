@@ -4,11 +4,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, SavedConversation } from '../types';
-import { loadConversationLibrary } from '../store/conversationStore';
-import { DESIGN, DesignFrame, DesignIcon, GlassButton, Orb, Waveform, TranscriptionIcon, RetryIcon } from '../components/CoachieDesign';
+import { loadConversationLibrary, deleteConversation } from '../store/conversationStore';
+import { DESIGN, DesignFrame, DesignIcon, GlassButton, Orb, Waveform, TranscriptionIcon, RetryIcon, TrashIcon } from '../components/CoachieDesign';
 import { FadeIn, MotionPressable, Reveal } from '../components/Motion';
 
 type Props = StackScreenProps<RootStackParamList, 'Conversation'>;
+
+const formatTime = (seconds: number) =>
+  `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+
 
 function renderFormattedMessage(text: string) {
   const parts = text.split(/(`[^`]+`|\[[^\]]+\]|\b[\w-]+\.(?:sh|ts|js|cpp|py|json|jsx|tsx)\b)/g);
@@ -39,6 +43,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,8 +90,38 @@ export default function ConversationScreen({ navigation, route }: Props) {
           <GlassButton label="Audio setting" onPress={() => {}} style={styles.speakerButton}>
             <DesignIcon name="speaker" />
           </GlassButton>
+
+          <GlassButton label="Delete conversation" onPress={() => setConfirmDelete(true)} style={styles.speakerButton}>
+            <TrashIcon size={16} color="#FFAA80" />
+          </GlassButton>
         </View>
       </View>
+
+      {confirmDelete && (
+        <View style={styles.deleteConfirmOverlay}>
+          <View style={styles.deleteConfirmDialog}>
+            <Text style={styles.deleteConfirmTitle}>Delete Conversation</Text>
+            <Text style={styles.deleteConfirmDesc}>Are you sure you want to delete this conversation? This action cannot be undone.</Text>
+            <View style={styles.deleteConfirmActions}>
+              <MotionPressable accessibilityRole="button" onPress={() => setConfirmDelete(false)} style={styles.cancelDeleteBtn}>
+                <Text style={styles.cancelDeleteText}>Cancel</Text>
+              </MotionPressable>
+              <MotionPressable
+                accessibilityRole="button"
+                onPress={async () => {
+                  try {
+                    await deleteConversation(route.params.id);
+                    navigation.goBack();
+                  } catch (_) {}
+                }}
+                style={styles.confirmDeleteBtn}
+              >
+                <Text style={styles.confirmDeleteBtnText}>Delete</Text>
+              </MotionPressable>
+            </View>
+          </View>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.chatScrollContent}>
         {loading ? (
@@ -117,6 +152,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   <React.Fragment key={round.roundNumber}>
                     {/* AI Question Bubble */}
                     <FadeIn style={styles.aiMessageGroup}>
+                      <View style={styles.draftingRow}>
+                        <Orb size={28} />
+                        <View style={styles.draftingPill}>
+                          <Text style={styles.draftingText}>Aira · Synthetic Voice</Text>
+                        </View>
+                      </View>
                       <View style={styles.aiBubbleWrapper}>
                         <View style={styles.aiBubbleContainer}>
                           <View style={styles.aiQuestionContent}>
@@ -144,7 +185,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                               <Waveform active={isPlayingAi} progress={isPlayingAi ? 0.6 : 0} />
                             </View>
 
-                            <Text style={styles.aiDurationText}>0:24</Text>
+                            <Text style={styles.aiDurationText}>{formatTime(Math.max(4, Math.round(round.question.trim().split(/\s+/).filter(Boolean).length / 2.5)))}</Text>
                           </View>
                         </View>
 
@@ -174,7 +215,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
                           <View style={styles.candidateWaveArea}>
                             <Waveform candidate active={isPlayingCand} progress={isPlayingCand ? 0.5 : 0} />
-                            <Text style={styles.candidateSizeCaption}>00:18, {estKb} KB</Text>
+                            <Text style={styles.candidateSizeCaption}>
+                              {formatTime(Math.max(3, Math.round(round.answer.trim().split(/\s+/).filter(Boolean).length / 2.5)))}, {Math.max(20, Math.round(Math.max(3, Math.round(round.answer.trim().split(/\s+/).filter(Boolean).length / 2.5)) * 3.4))} KB
+                            </Text>
                           </View>
 
                           <MotionPressable
@@ -507,6 +550,89 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.4)',
   },
 
+  draftingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  draftingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  draftingText: {
+    fontFamily: DESIGN.font,
+    fontSize: 12,
+    color: '#D4D4D8',
+  },
+  deleteConfirmOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    zIndex: 99,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  deleteConfirmDialog: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#1E120B',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,140,60,0.25)',
+    gap: 12,
+  },
+  deleteConfirmTitle: {
+    fontFamily: DESIGN.semibold,
+    fontSize: 16,
+    color: '#FFF',
+  },
+  deleteConfirmDesc: {
+    fontFamily: DESIGN.font,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#D4C4BA',
+  },
+  deleteConfirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 6,
+  },
+  cancelDeleteBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  cancelDeleteText: {
+    fontFamily: DESIGN.medium,
+    fontSize: 13,
+    color: '#FFF',
+  },
+  confirmDeleteBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#DC2626',
+  },
+  confirmDeleteBtnText: {
+    fontFamily: DESIGN.semibold,
+    fontSize: 13,
+    color: '#FFF',
+  },
   // Feedback Card
   feedbackCard: {
     padding: 20,

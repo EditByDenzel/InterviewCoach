@@ -3,7 +3,8 @@ import { Animated, Modal, Platform, ScrollView, StyleSheet, Text, View, useWindo
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SavedConversation } from '../types';
-import { DESIGN, DesignIcon } from './CoachieDesign';
+import { DESIGN, DesignIcon, TrashIcon } from './CoachieDesign';
+import { deleteConversation } from '../store/conversationStore';
 import { easeDrawer, LiveDots, MotionPressable, useMotion } from './Motion';
 
 type Props = {
@@ -32,6 +33,7 @@ export function ConversationSidebar({
   const [mounted, setMounted] = useState(open);
   const progress = useRef(new Animated.Value(0)).current;
   const width = Math.min(340, window.width * 0.88);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) setMounted(true);
@@ -46,6 +48,19 @@ export function ConversationSidebar({
     });
     return () => animation.stop();
   }, [open, progress, reduced]);
+
+  const handleDelete = async (id: string, e?: any) => {
+    e?.stopPropagation?.();
+    if (confirmDeleteId === id) {
+      try {
+        await deleteConversation(id);
+        setConfirmDeleteId(null);
+        onRetry();
+      } catch (_) {}
+    } else {
+      setConfirmDeleteId(id);
+    }
+  };
 
   // Find index of most recent non-sample conversation
   const mostRecentId = conversations.find((c) => !c.isSample)?.id || conversations[0]?.id;
@@ -69,13 +84,7 @@ export function ConversationSidebar({
         {/* Drawer Container */}
         <View
           pointerEvents="box-none"
-          style={[
-            styles.bounds,
-            {
-              width: Math.min(390, window.width),
-              height: Platform.OS === 'web' && window.width > 600 ? Math.min(900, window.height - 48) : window.height,
-            },
-          ]}
+          style={styles.bounds}
         >
           <Animated.View
             accessibilityViewIsModal
@@ -175,7 +184,21 @@ export function ConversationSidebar({
                           <Text numberOfLines={2} style={[styles.itemTitle, isLatest && { color: '#FFF' }]}>
                             {item.topic}
                           </Text>
-                          {isLatest && <View style={styles.recentDot} />}
+                          <View style={styles.actionsCluster}>
+                            {isLatest && <View style={styles.recentDot} />}
+                            <MotionPressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Delete conversation: ${item.topic}`}
+                              onPress={(e) => handleDelete(item.id, e)}
+                              style={[styles.deleteButton, confirmDeleteId === item.id && styles.deleteButtonConfirm]}
+                            >
+                              {confirmDeleteId === item.id ? (
+                                <Text style={styles.deleteConfirmLabel}>Delete?</Text>
+                              ) : (
+                                <TrashIcon size={14} color="#9E928A" />
+                              )}
+                            </MotionPressable>
+                          </View>
                         </View>
                         <Text style={styles.meta}>
                           {item.isSample
@@ -201,10 +224,11 @@ export function ConversationSidebar({
 }
 
 const styles = StyleSheet.create({
-  modal: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  bounds: { position: 'relative' },
+  modal: { flex: 1, flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'stretch' },
+  bounds: { height: '100%', position: 'relative', zIndex: 10 },
   panel: {
     height: '100%',
+    overflow: 'hidden',
     backgroundColor: '#140B07',
     borderRightWidth: 1,
     borderRightColor: 'rgba(255,140,60,0.18)',
@@ -258,6 +282,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 8,
+  },
+  actionsCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonConfirm: {
+    backgroundColor: 'rgba(239,68,68,0.22)',
+    paddingHorizontal: 8,
+  },
+  deleteConfirmLabel: {
+    fontFamily: DESIGN.medium,
+    fontSize: 11,
+    color: '#F87171',
   },
   recentDot: {
     width: 6,

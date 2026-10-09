@@ -10,6 +10,7 @@ import {
   Animated,
   Easing,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,6 +32,7 @@ import {
   setPlaybackMuted,
   readAudioAsBase64,
   requestMicrophonePermission,
+  subscribeAudioLevel,
 } from '../services/audioService';
 import {
   DESIGN,
@@ -120,6 +122,14 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [playProgress, setPlayProgress] = useState(0);
+  const [micLevel, setMicLevel] = useState(0);
+
+  useEffect(() => {
+    const unsub = subscribeAudioLevel((lvl) => {
+      if (alive.current) setMicLevel(lvl);
+    });
+    return unsub;
+  }, []);
 
   const durations = useRef<Record<number, number>>({});
   const alive = useRef(true);
@@ -553,19 +563,21 @@ export default function InterviewScreen({ navigation, route }: Props) {
   // Renders the AI Question Bubble with attached Waveform Bar
   const renderAiBubble = (q: string, index: number, isCurrent = false) => {
     const isPlaying = playingKey === `q-${index}`;
-    const durationSec = durations.current[index] || 24;
+    const durationSec = durations.current[index];
+    const isDrafting = isCurrent && phase === 'generating_question';
+
     return (
       <FadeIn key={`ai-${index}`} style={styles.aiMessageGroup}>
-        {/* Drafting pill during live generation */}
-        {isCurrent && phase === 'generating_question' && (
-          <View style={styles.draftingRow}>
-            <Orb size={28} />
-            <View style={styles.draftingPill}>
-              <Text style={styles.draftingText}>Aira is drafting the question...</Text>
-              <LiveDots active />
-            </View>
+        {/* Persistent Aira pill header on every message */}
+        <View style={styles.draftingRow}>
+          <Orb size={28} />
+          <View style={styles.draftingPill}>
+            <Text style={styles.draftingText}>
+              {isDrafting ? 'Aira is drafting the question...' : 'Aira · Synthetic Voice'}
+            </Text>
+            {isDrafting && <LiveDots active />}
           </View>
-        )}
+        </View>
 
         {!!q && (
           <View style={styles.aiBubbleWrapper}>
@@ -606,7 +618,13 @@ export default function InterviewScreen({ navigation, route }: Props) {
                   <Waveform active={isPlaying || (isCurrent && phase === 'speaking')} progress={isPlaying || (isCurrent && phase === 'speaking') ? playProgress : 0} />
                 </View>
 
-                <Text style={styles.aiDurationText}>{formatTime(durationSec)}</Text>
+                {durationSec ? (
+                  <Text style={styles.aiDurationText}>{formatTime(durationSec)}</Text>
+                ) : (
+                  <View style={{ width: 44, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="small" color="#FF8C38" />
+                  </View>
+                )}
               </View>
             </View>
 
@@ -624,8 +642,8 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const renderCandidateCard = (answerText: string, index: number, isPending = false) => {
     const isPlaying = playingKey === `a-${index}`;
     const isCollapsed = collapsed[index];
-    const recSeconds = recordings.current[index]?.seconds || 18;
-    const estKb = Math.max(24, Math.round(recSeconds * 3.6));
+    const recSeconds = recordings.current[index]?.seconds;
+    const estKb = recSeconds ? Math.max(24, Math.round(recSeconds * 3.6)) : 0;
 
     return (
       <FadeIn key={`cand-${index}`} style={styles.candidateCardWrapper}>
@@ -655,7 +673,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
             <View style={styles.candidateWaveArea}>
               <Waveform candidate active={isPlaying || isPending} progress={isPlaying ? playProgress : 0} />
               <Text style={styles.candidateSizeCaption}>
-                {isPending ? 'Transcribing...' : `${formatTime(recSeconds)}, ${estKb} KB`}
+                {isPending ? 'Transcribing...' : recSeconds ? `${formatTime(recSeconds)}, ${estKb} KB` : 'Processing...'}
               </Text>
             </View>
 
@@ -758,7 +776,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
                 )}
               </GlassButton>
 
-              <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
+              <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} level={phase === 'recording' && !paused ? micLevel : 0} />
 
               <GlassButton
                 label="Voice & language settings"
@@ -894,7 +912,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
                     )}
                   </GlassButton>
 
-                  <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} />
+                  <GlowButton onPress={record} disabled={!canRecord} recording={phase === 'recording'} paused={paused} level={phase === 'recording' && !paused ? micLevel : 0} />
 
                   <GlassButton
                     label="Voice & language settings"

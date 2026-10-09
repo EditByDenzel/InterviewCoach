@@ -111,9 +111,9 @@ export function HeroOrb({ size = 176 }: { size?: number }) {
   </View>;
 }
 
-export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?: boolean; size?: number; home?: boolean }) {
+export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false, level = 0 }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?: boolean; size?: number; home?: boolean; level?: number }) {
   const haloSize = size + 24;
-  return <BreathingHalo size={haloSize} active={!disabled && !paused} recording={recording}>
+  return <BreathingHalo size={haloSize} active={!disabled && !paused} recording={recording} level={level}>
     <MotionPressable accessibilityRole="button" accessibilityLabel={home ? 'Start interview' : recording ? 'Stop recording and submit answer' : 'Record answer'} disabled={disabled} onPress={onPress} style={[{ width: size, height: size, borderRadius: size / 2 }, !home && styles.glow]}>
       <LinearGradient colors={['#E03A00', '#FF621E', '#FFA742']} start={{ x: 0, y: 1 }} end={{ x: 0, y: 0 }} style={[styles.glowInner, { borderRadius: size / 2 }]}>
         <DesignIcon name={home ? 'homeMic' : 'mic'} />
@@ -266,6 +266,14 @@ export function RetryIcon({ size = 18, color = '#FFF' }: { size?: number; color?
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <Path d="M3 3v5h5" />
+    </Svg>
+  );
+}
+
+export function TrashIcon({ size = 16, color = '#FF7B60' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />
     </Svg>
   );
 }

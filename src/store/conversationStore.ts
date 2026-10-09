@@ -25,11 +25,35 @@ export function saveConversation(conversation:SavedConversation):Promise<void> {
   return operation;
 }
 
+const DELETED_SAMPLES_KEY = '@coachie_deleted_samples_v1';
+
+export function deleteConversation(id: string): Promise<void> {
+  const operation = queue.catch(() => {}).then(async () => {
+    const existing = await loadConversations();
+    await AsyncStorage.setItem(KEY, JSON.stringify(existing.filter(item => item.id !== id)));
+    const isSample = sampleConversations.some(s => s.id === id);
+    if (isSample) {
+      const raw = await AsyncStorage.getItem(DELETED_SAMPLES_KEY);
+      const deleted: string[] = raw ? JSON.parse(raw) : [];
+      if (!deleted.includes(id)) {
+        await AsyncStorage.setItem(DELETED_SAMPLES_KEY, JSON.stringify([...deleted, id]));
+      }
+    }
+  });
+  queue = operation;
+  return operation;
+}
+
 export function createConversationId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`; }
 
 /** Samples are bundled, clearly labeled, and never written over personal history. */
 export async function loadConversationLibrary(): Promise<SavedConversation[]> {
   const saved = await loadConversations();
-  return [...saved, ...sampleConversations.filter(sample => !saved.some(item => item.id === sample.id))];
+  const rawDeleted = await AsyncStorage.getItem(DELETED_SAMPLES_KEY);
+  const deletedSamples: string[] = rawDeleted ? JSON.parse(rawDeleted) : [];
+  return [
+    ...saved,
+    ...sampleConversations.filter(sample => !saved.some(item => item.id === sample.id) && !deletedSamples.includes(sample.id))
+  ];
 }
 

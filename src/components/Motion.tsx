@@ -74,21 +74,83 @@ export function LiveDots({active}:{active:boolean}) {
   return <View accessible={false} style={{flexDirection:'row',gap:4,height:12,alignItems:'center'}}>{values.map((opacity,index)=><Animated.View key={index} style={{width:4,height:4,borderRadius:2,backgroundColor:'#FB923C',opacity,transform:[{translateY:reduced?0:opacity.interpolate({inputRange:[.3,1],outputRange:[2,-2]})}]}}/>)}</View>;
 }
 
-export function BreathingHalo({size,active,recording,children}:PropsWithChildren<{size:number;active:boolean;recording?:boolean}>) {
-  const {reduced}=useMotion();
-  const breath=useRef(new Animated.Value(0)).current;
-  useEffect(()=>{
+export function BreathingHalo({
+  size,
+  active,
+  recording,
+  level = 0,
+  children,
+}: PropsWithChildren<{ size: number; active: boolean; recording?: boolean; level?: number }>) {
+  const { reduced } = useMotion();
+  const breath = useRef(new Animated.Value(0)).current;
+  const audioAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
     breath.setValue(0);
-    if(!active||reduced)return;
-    const animation=Animated.loop(Animated.sequence([
-      Animated.timing(breath,{toValue:1,duration:recording?800:1400,easing:Easing.inOut(Easing.sin),useNativeDriver:Platform.OS!=='web',isInteraction:false}),
-      Animated.timing(breath,{toValue:0,duration:recording?800:1400,easing:Easing.inOut(Easing.sin),useNativeDriver:Platform.OS!=='web',isInteraction:false}),
-    ]));animation.start();return()=>animation.stop();
-  },[active,reduced,recording,breath]);
-  return <View style={{width:size,height:size,alignItems:'center',justifyContent:'center'}}>
-    <Animated.View pointerEvents="none" style={{position:'absolute',width:size+16,height:size+16,borderRadius:(size+16)/2,backgroundColor:'#FF751E',opacity:active?breath.interpolate({inputRange:[0,1],outputRange:[.08,.2]}):0,transform:[{scale:breath.interpolate({inputRange:[0,1],outputRange:[1,1.17]})}],shadowColor:'#FF641C',shadowRadius:20,shadowOpacity:.8,shadowOffset:{width:0,height:0}}}/>
-    {children}
-  </View>;
+    if (!active || reduced) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breath, {
+          toValue: 1,
+          duration: recording ? 800 : 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: Platform.OS !== 'web',
+          isInteraction: false,
+        }),
+        Animated.timing(breath, {
+          toValue: 0,
+          duration: recording ? 800 : 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: Platform.OS !== 'web',
+          isInteraction: false,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [active, reduced, recording, breath]);
+
+  useEffect(() => {
+    if (reduced) return;
+    Animated.timing(audioAnim, {
+      toValue: recording ? Math.max(0, Math.min(1, level)) : 0,
+      duration: 60,
+      easing: Easing.linear,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }, [level, recording, reduced, audioAnim]);
+
+  const haloScale = Animated.add(
+    breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] }),
+    audioAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] })
+  );
+
+  const haloOpacity = Animated.add(
+    breath.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.22] }),
+    audioAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.45] })
+  );
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          width: size + 16,
+          height: size + 16,
+          borderRadius: (size + 16) / 2,
+          backgroundColor: '#FF751E',
+          opacity: active ? haloOpacity : 0,
+          transform: [{ scale: haloScale }],
+          shadowColor: '#FF641C',
+          shadowRadius: 24,
+          shadowOpacity: 0.9,
+          shadowOffset: { width: 0, height: 0 },
+        }}
+      />
+      {children}
+    </View>
+  );
 }
 
 export function Reveal({open,children}:PropsWithChildren<{open:boolean}>) {

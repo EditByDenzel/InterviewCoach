@@ -137,6 +137,20 @@ let vadInterval: any = null;
 let vadStream: any = null;
 let vadAudioContext: any = null;
 
+type AudioLevelCallback = (level: number) => void;
+const audioLevelListeners = new Set<AudioLevelCallback>();
+
+export function subscribeAudioLevel(callback: AudioLevelCallback): () => void {
+  audioLevelListeners.add(callback);
+  return () => { audioLevelListeners.delete(callback); };
+}
+
+function broadcastAudioLevel(level: number) {
+  audioLevelListeners.forEach((fn) => {
+    try { fn(level); } catch (_) {}
+  });
+}
+
 function setupWebVAD(onSilenceDetected?: () => void, onIdleTimeout?: () => void) {
   if (Platform.OS !== 'web' || (!onSilenceDetected && !onIdleTimeout)) return;
   try {
@@ -163,6 +177,9 @@ function setupWebVAD(onSilenceDetected?: () => void, onIdleTimeout?: () => void)
         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
         const avg = sum / dataArray.length;
 
+        const normalized = Math.min(1, Math.max(0, (avg - 10) / 45));
+        broadcastAudioLevel(normalized);
+
         const now = Date.now();
         if (avg > 14) {
           if (!speechStarted) {
@@ -182,12 +199,13 @@ function setupWebVAD(onSilenceDetected?: () => void, onIdleTimeout?: () => void)
             onSilenceDetected?.();
           }
         }
-      }, 100);
+      }, 80);
     }).catch(() => {});
   } catch (_) {}
 }
 
 function cleanUpVAD() {
+  broadcastAudioLevel(0);
   if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
   if (vadStream) {
     try { vadStream.getTracks().forEach((t: any) => t.stop()); } catch (_) {}
@@ -231,6 +249,8 @@ export async function startRecording(onSilenceDetected?: () => void, onIdleTimeo
       if (!status.isRecording) return;
       const now = Date.now();
       const metering = status.metering ?? -160;
+      const normalized = Math.min(1, Math.max(0, (metering + 50) / 40));
+      broadcastAudioLevel(normalized);
       if (metering > -38) {
         speechStarted = true;
         lastSpeechTime = now;
