@@ -8,6 +8,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Concurrent response preparation and chat labels - 2026-10-11
+
+- Prepare the next turn directly from the completed recording while source
+  transcription/English translation run. Keep active-run context isolated,
+  reuse eligible saved wording, and consume the prepared decision only for its
+  matching accepted reply. Playback remains gated by durable reply acceptance.
+  Failed audio reasoning falls back to complete transcript context; retries,
+  early completion and closing cannot append/play a stale prepared response.
+- Replaced generic Aira/Synthetic Voice pills with persisted action descriptions.
+  Audio captions show the actual A/B provider and fixed voice (Gemini / Kore,
+  for example), including reopened sessions. Model B marks shared opener reuse.
+- Softened the footer using stronger glass blur, a feathered web mask and a
+  longer transparent gradient. Original mic/buttons and scrolling are preserved.
+- Verified 185 tests across 17 suites, TypeScript and whitespace checks. New
+  controlled tests prove overlap before transcription resolves, single use,
+  transcript fallback, isolated audio context and no late playback after close.
+  Browser fixtures verified action/provider captions and the footer fade.
+  Live provider latency, audio understanding quality and native blur fidelity
+  have not been measured on physical phones.
+
+
 ### Home photo/language controls and automatic saving — 2026-10-11
 
 - Moved the photo icon inside the left edge of the Home topic composer with

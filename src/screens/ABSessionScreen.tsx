@@ -10,7 +10,7 @@ import { prepareConversation, scenarioFromTopic } from '../services/conversation
 import { loadSettings } from '../store/settingsStore';
 import { saveABSession, loadABSession, deleteABSession } from '../store/abSessionStore';
 import { saveAudioAsset, loadAudioAsset, deleteAudioAssets } from '../store/audioAssetStore';
-import { decideNextTurn, translateToEnglish, compareRuns } from '../services/abConversationService';
+import { decideNextTurn, translateToEnglish, compareRuns, DialogueDecision } from '../services/abConversationService';
 import { generateGeminiTTS, transcribeAudio } from '../services/geminiService';
 import { createRecordingSession } from '../services/recordingSession';
 import { playBase64Audio, stopPlayback, setPlaybackMuted, startRecording, stopRecording, pauseRecording, resumeRecording, requestMicrophonePermission, readAudioAsBase64, releaseTemporaryRecording, subscribeAudioLevel, AudioExtension } from '../services/audioService';
@@ -20,7 +20,7 @@ import { FadeIn, LiveDots, MotionPressable, useMotion, Reveal } from '../compone
 
 type Props = StackScreenProps<RootStackParamList, 'ABSession'>;
 type Phase = 'ready' | 'thinking' | 'speaking' | 'listening' | 'paused' | 'transcribing' | 'ending' | 'waiting' | 'comparing' | 'complete' | 'error';
-const labels: Record<Phase, string> = { ready: 'Ready when you are', thinking: 'Choosing a natural follow-up', speaking: 'Coachie is speaking', listening: 'Listening to the model', paused: 'Paused', transcribing: 'Preparing the English transcript', ending: 'Finishing this model run', waiting: 'Switch to Model B on your computer', comparing: 'Comparing the evidence', complete: 'Comparison ready', error: 'An action needs your attention' };
+const labels: Record<Phase, string> = { ready: 'Ready when you are', thinking: 'Choosing a natural follow-up', speaking: 'Coachie is speaking', listening: 'Listening to the model', paused: 'Paused', transcribing: 'Preparing transcript & response', ending: 'Finishing this model run', waiting: 'Switch to Model B on your computer', comparing: 'Comparing the evidence', complete: 'Comparison ready', error: 'An action needs your attention' };
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 const audioExtension = (mime: string): AudioExtension => ({ 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/mp4': 'mp4', 'audio/m4a': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/aac': 'aac', 'audio/x-caf': 'caf' }[mime.split(';')[0]] as AudioExtension) || 'm4a';
 const id = (session: ABSession, speaker: 'tasker' | 'model') => `${session.id}-${session.activeRun}-${speaker}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -47,6 +47,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const finalized = useRef<(uri: string) => Promise<void>>(async () => {});
   const temporaryReply = useRef<{ id: string; uri: string; run: 'A' | 'B' } | null>(null);
   const retainingReply = useRef<Promise<void> | null>(null);
+  const preparedReply = useRef<{id:string;run:'A'|'B';decision:Promise<DialogueDecision|null>} | null>(null);
   const { reduced } = useMotion();
   useEffect(() => { void setPlaybackMuted(muted); }, [muted]);
 
@@ -138,11 +139,15 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     const s = state.current;
     const used = new Set(contextForRun(s).filter(t => t.speaker === 'tasker').map(t => t.sourceText));
     const eligible = s.turns.filter(t => t.speaker === 'tasker' && t.scenarioOnly && t.delivered && !used.has(t.sourceText));
-    const decision = await decideNextTurn(apiKey(), s, eligible); ensureActive();
+    const prepared = preparedReply.current;
+    const lastReply = contextForRun(s).filter(t=>t.speaker==='model').at(-1);
+    const early = prepared && prepared.id === lastReply?.id && prepared.run === s.activeRun ? await prepared.decision : null;
+    ensureActive(); preparedReply.current = null;
+    const decision = early || await decideNextTurn(apiKey(), s, eligible); ensureActive();
     if (finishRequested.current || completionForRun(state.current, { goalResolved: decision.goalResolved }).shouldEnd) { await endCurrent(); return; }
     const reused = eligible.find(t => t.id === decision.reuseTurnId);
     const turn: ABTurn = { id: id(state.current, 'tasker'), run: state.current.activeRun, speaker: 'tasker', sourceText: decision.sourceText, englishText: decision.englishText,
-      audioAssetId: reused?.audioAssetId, scenarioOnly: decision.scenarioOnly, delivered: false, createdAt: new Date().toISOString() };
+      audioAssetId: reused?.audioAssetId, action: decision.action || (reused ? 'Reused a question' : lastReply ? 'Asked a follow-up' : 'Asked an opening question'), scenarioOnly: decision.scenarioOnly, delivered: false, createdAt: new Date().toISOString() };
     update(appendTurn(state.current, turn));
     await persistThen(() => speakTurn(turn));
   };
@@ -159,6 +164,14 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     if (!pending) throw new Error('No saved reply is waiting for transcription.');
     const audio = await loadAudioAsset(pending.audioAssetId);
     if (!audio) throw new Error('The recorded reply is unavailable. Please record again.');
+    if (preparedReply.current?.id !== pending.id && !finishRequested.current && !completionForRun(state.current).shouldEnd) {
+      // Reason from the actual audio while the independent durable transcript
+      // is produced. Never speculate from an empty/partial transcript.
+      const snapshot = state.current;
+      const used = new Set(contextForRun(snapshot).filter(t=>t.speaker==='tasker').map(t=>t.sourceText));
+      const eligible = snapshot.turns.filter(t=>t.speaker==='tasker'&&t.scenarioOnly&&t.delivered&&!used.has(t.sourceText));
+      preparedReply.current = {id:pending.id,run:pending.run,decision:decideNextTurn(apiKey(), snapshot, eligible, audio).catch(()=>null)};
+    }
     let source = pending.sourceText;
     if (!source) {
       source = await transcribeAudio(apiKey(), audio.base64, audio.mimeType); ensureActive();
@@ -214,7 +227,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       const opener = state.current.turns.find(t => t.run === 'A' && t.speaker === 'tasker' && t.delivered);
       if (!opener) throw new Error('Model A has no delivered opener to reuse. Resume A or start a new scenario.');
       update(startB(state.current));
-      const turn = { ...opener, id: id(state.current, 'tasker'), run: 'B' as const, delivered: false, createdAt: new Date().toISOString() };
+      const turn = { ...opener, id: id(state.current, 'tasker'), run: 'B' as const, action:'Reused the opening question', delivered: false, createdAt: new Date().toISOString() };
       update(appendTurn(state.current, turn)); await persistThen(() => speakTurn(turn));
     } else if (state.current.status === 'comparing') await evaluate();
     else if (state.current.pendingReply) await finalizePending();
@@ -346,7 +359,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const renderTurn = (turn: ABTurn, index: number) => {
     const playing = playingId === turn.id;
     if (turn.speaker === 'tasker') return <FadeIn key={turn.id} style={chat.aiMessageGroup}>
-      <View style={chat.draftingRow}><Orb size={28}/><View style={chat.draftingPill}><Text style={chat.draftingText}>Aira · Synthetic Voice</Text></View></View>
+      <View style={chat.draftingRow}><Orb size={28}/><View style={chat.draftingPill}><Text style={chat.draftingText}>{turn.action || (index === 0 ? 'Asked an opening question' : 'Asked a follow-up')}</Text></View></View>
       <View style={chat.aiBubbleWrapper}><View style={chat.aiBubbleContainer}>
         <View style={chat.aiQuestionContent}><Text selectable style={chat.messageText}>{turn.englishText}</Text></View>
         <View style={chat.attachedAudioBar}>
@@ -357,7 +370,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
           <View style={chat.aiWaveformArea}><Waveform active={playing} progress={playing ? progress : 0}/></View>
           {turn.audioAssetId ? <Text style={chat.aiDurationText}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text> : <ActivityIndicator size="small" color="#FF8C38"/>}
         </View>
-      </View><Text style={chat.aiMetaCaption}>{stamp(turn.createdAt)} • Synthetic Voice (Aira)</Text></View>
+      </View><Text style={chat.aiMetaCaption}>{stamp(turn.createdAt)} • Gemini · {session.persona.voice}</Text></View>
     </FadeIn>;
     return <FadeIn key={turn.id} style={chat.candidateCardWrapper}><View style={chat.candidateCard}>
       {turn.audioAssetId && <View style={chat.candidateAudioRow}>
@@ -417,8 +430,8 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       {session.comparison && <View style={styles.card}><Text style={styles.title}>Suggested: {session.comparison.recommendation.replace('_', ' ')}</Text><Text style={styles.body}>{session.comparison.summary}</Text><Text style={styles.body}>A: {session.comparison.outcomes.A}{'\n'}B: {session.comparison.outcomes.B}</Text>{session.comparison.findings.map((f, i) => <View key={i} style={styles.finding}><Text style={styles.cardTitle}>{f.dimension}</Text><Text style={styles.body}>{f.detail}</Text><Text style={styles.meta}>Evidence: {f.turnIds.map(turnId => { const t = session.turns.find(t => t.id === turnId); return t ? `Model ${t.run} · turn ${session.turns.filter(t2 => t2.run === t.run).findIndex(t2 => t2.id === turnId) + 1}` : ''; }).join(', ')}</Text></View>)}{session.comparison.limitations.map((l, i) => <Text key={i} style={styles.meta}>{l}</Text>)}<Text style={styles.cardTitle}>Your final choice</Text><View style={styles.voteRow}>{(['A', 'B', 'tie', 'insufficient_evidence'] as ABVote[]).map(v => <GlassButton key={v} label={`Choose ${v}`} accessibilityState={{ selected: session.vote === v }} onPress={() => void operate(async () => { update(setVote(state.current, v)); await persist(); })} style={[styles.vote, session.vote === v && styles.selected]}><Text style={styles.buttonText}>{v === 'insufficient_evidence' ? 'Unsure' : v}</Text></GlassButton>)}</View><GlassButton label="Share comparison and English transcript" onPress={() => void Share.share({ message: `${session.scenario.title}\n\n${session.turns.map(t => `${t.run} ${t.speaker}: ${t.englishText}`).join('\n\n')}\n\n${session.comparison!.summary}\nUser vote: ${session.vote || 'not selected'}` })} style={styles.choice}><Text style={styles.buttonText}>Share transcript</Text></GlassButton></View>}
       </ScrollView>
       <View style={chat.anchoredSpeakerFooter}>
-        <LinearGradient pointerEvents="none" colors={['transparent','rgba(13, 4, 2, 0.45)','rgba(13, 4, 2, 0.85)','#0D0402']} locations={[0,.25,.65,1]} style={[StyleSheet.absoluteFill,{top:-36}]}/>
-        <BlurView intensity={Platform.OS === 'web' ? 15 : 25} tint="dark" style={StyleSheet.absoluteFill}/>
+        <BlurView pointerEvents="none" intensity={Platform.OS === 'web' ? 35 : 45} tint="dark" style={[StyleSheet.absoluteFill,{top:-64},Platform.OS==='web'&&({maskImage:'linear-gradient(to bottom, transparent, black 48%)',WebkitMaskImage:'linear-gradient(to bottom, transparent, black 48%)'} as any)]}/>
+        <LinearGradient pointerEvents="none" colors={['transparent','rgba(13,4,2,.12)','rgba(13,4,2,.42)','rgba(13,4,2,.72)']} locations={[0,.3,.65,1]} style={[StyleSheet.absoluteFill,{top:-64}]}/>
         <View style={chat.footerInner}>{footerContent}</View>
       </View>
     </View></KeyboardAvoidingView>}

@@ -332,6 +332,45 @@ describe('Real A/B screen integration with controlled device and provider bounda
     expect(mockSaved!.turns).toHaveLength(1);
   });
 
+  it('prepares a response from recorded audio before transcription finishes, then consumes it once', async () => {
+    const transcript = deferred<string>(); mockTranscribe.mockReturnValueOnce(transcript.promise);
+    await mount(); await press('Start Model A');
+    mockDecide.mockResolvedValueOnce({sourceText:'What would you recommend next?',englishText:'What would you recommend next?',reuseTurnId:'',goalResolved:false,scenarioOnly:false,action:'Asked a follow-up'});
+    await press('Finish model reply');
+    expect(mockDecide).toHaveBeenCalledTimes(2);
+    expect(mockDecide.mock.calls[1][3]).toMatchObject({base64:'cmVwbHk=',mimeType:'audio/m4a'});
+    expect(mockSaved!.turns.filter(t=>t.speaker==='model')).toHaveLength(0);
+    expect(mockTTS).toHaveBeenCalledTimes(1);
+    await act(async()=>{transcript.resolve('The complete model reply.');await flush();});
+    expect(mockDecide).toHaveBeenCalledTimes(2);
+    expect(mockTTS).toHaveBeenCalledTimes(2);
+    expect(mockSaved!.turns.filter(t=>t.speaker==='model')).toHaveLength(1);
+    expect(visibleText()).toContain('Gemini · Kore');
+    expect(visibleText()).toContain('Asked a follow-up');
+    expect(visibleText()).not.toContain('Synthetic Voice');
+  });
+
+  it('falls back to complete transcript context if concurrent audio reasoning fails',async()=>{
+    await mount(); await press('Start Model A');
+    mockDecide.mockRejectedValueOnce(new Error('Audio understanding unavailable'));
+    await press('Finish model reply');
+    expect(mockDecide).toHaveBeenCalledTimes(3);
+    const fallback=mockDecide.mock.calls[2][1] as ABSession;
+    expect(contextForRun(fallback).at(-1)?.sourceText).toBe('A practical model reply.');
+    expect(mockSaved!.turns.filter(t=>t.speaker==='model')).toHaveLength(1);
+  });
+
+  it('cannot play a prepared reply after the chat closes during transcription',async()=>{
+    const transcript=deferred<string>();mockTranscribe.mockReturnValueOnce(transcript.promise);
+    await mount();await press('Start Model A');await press('Finish model reply');
+    expect(mockDecide).toHaveBeenCalledTimes(2);
+    await press('Close A/B chat');
+    await act(async()=>{transcript.resolve('A late transcript.');await flush();});
+    expect(navigation.popToTop).toHaveBeenCalledTimes(1);
+    expect(mockTTS).toHaveBeenCalledTimes(1);
+    expect(mockSaved!.pendingReply?.audioAssetId).toBeTruthy();
+  });
+
   it('recovers from an empty recording through explicit deletion without losing the opener or inventing a reply', async () => {
     mockTranscribe.mockResolvedValueOnce('');
     await mount(); await press('Start Model A'); await press('Finish model reply');
@@ -343,7 +382,7 @@ describe('Real A/B screen integration with controlled device and provider bounda
     expect(mockAssets.has(openerAsset)).toBe(true);
     expect(mockSaved!.pendingReply).toBeUndefined();
     expect(mockSaved!.turns.filter(t => t.speaker === 'model')).toHaveLength(0);
-    expect(mockDecide).toHaveBeenCalledTimes(1);
+    expect(mockDecide).toHaveBeenCalledTimes(2);
     expect(mockStartRecording).toHaveBeenCalledTimes(2);
   });
 

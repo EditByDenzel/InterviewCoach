@@ -28,6 +28,7 @@ export interface ABTurn {
   delivered?: boolean;
   scenarioOnly?: boolean;
   audioDurationSeconds?: number;
+  action?: string;
   createdAt: string;
 }
 export interface ABComparison {
@@ -75,6 +76,7 @@ export function isABTurn(value: any): value is ABTurn {
     isDate(value.createdAt) && (value.audioAssetId === undefined || (isText(value.audioAssetId) && !!value.audioAssetId)) &&
     (value.delivered === undefined || typeof value.delivered === 'boolean') &&
     (value.scenarioOnly === undefined || typeof value.scenarioOnly === 'boolean') &&
+    (value.action === undefined || isText(value.action)) &&
     (value.audioDurationSeconds === undefined || nonnegative(value.audioDurationSeconds));
 }
 export function isABComparison(value: any): value is ABComparison {
@@ -138,7 +140,7 @@ export function appendTurn(session: ABSession, turn: ABTurn): ABSession {
   if (!isABTurn(turn)) throw new Error('The turn needs its original words and English transcript.');
   const existing = session.turns.find(item => item.id === turn.id);
   if (existing) {
-    const fields: (keyof ABTurn)[] = ['id', 'run', 'speaker', 'sourceText', 'englishText', 'audioAssetId', 'createdAt', 'delivered', 'scenarioOnly', 'audioDurationSeconds'];
+    const fields: (keyof ABTurn)[] = ['id', 'run', 'speaker', 'sourceText', 'englishText', 'audioAssetId', 'createdAt', 'delivered', 'scenarioOnly', 'audioDurationSeconds', 'action'];
     if (!fields.every(field => existing[field] === turn[field])) throw new Error('A different turn already uses this ID.');
     return session;
   }

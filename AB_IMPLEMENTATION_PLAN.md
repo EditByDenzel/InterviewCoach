@@ -91,3 +91,5 @@ Run npm test -- --runInBand and npx tsc --noEmit. Release counts/results are rec
 tests/acceptance/README.md maps specifications to executable test files. The .feature file has no Gherkin bindings and is not an extra passing suite. Streaming cases are optional future specifications; fluent-listener and physical-device validation remain pending. Use synthetic inputs and dummy credentials; never commit private media, keys or the reference PDF.
 
 Further research links remain in VOICE_CONVERSATION_RESEARCH.md; they are not evidence of current device/provider verification.
+
+Completed-reply response preparation now runs from the original audio alongside transcription/translation. It uses isolated active-run context and eligible reusable questions; only a matching finalized reply can consume it. Persist the reply before playback. Failed audio reasoning falls back to complete text; close/run-end prevents stale playback. Action labels are stored per tasker turn; voice captions use the fixed A/B Gemini voice. This is overlapping whole-recording processing, not live streaming or measured latency.

@@ -63,6 +63,14 @@ describe('A/B conversation service safeguards', () => {
     expect(requestBody().generationConfig.responseMimeType).toBe('application/json');
   });
 
+  it('uses the current recording alongside isolated B context for concurrent response preparation',async()=>{
+    respond({...decision,action:'Asked a follow-up'});
+    const audio={base64:'fixture-recording',mimeType:'audio/m4a'};
+    await decideNextTurn('test-key',sessionB(),[],audio);
+    expect(requestBody().contents[0].parts).toContainEqual({inlineData:{data:audio.base64,mimeType:audio.mimeType}});
+    expect(JSON.stringify(requestBody())).not.toContain('A_ONLY_REPLY_FACTS_9371');
+  });
+
   it('reuses exact cached wording instead of model-rewritten source or translation', async () => {
     const session = sessionB(), cached = session.turns[0];
     respond({ ...decision, reuseTurnId: cached.id, sourceText: 'Wrong rewrite', englishText: 'Wrong translation' });

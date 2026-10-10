@@ -27,10 +27,10 @@ export async function designPreviewFetch(input: string, init?: RequestInit): Pro
     let result: any;
     if (properties.reuseTurnId) {
       fixtureLanguage = payload.scenario?.language || 'English';
-      const replies = (payload.conversation || []).filter((t: any) => t.speaker === 'model').length;
+      const replies = (payload.conversation || []).filter((t: any) => t.speaker === 'model').length + (body.contents[0].parts.some((part:any)=>part.inlineData) ? 1 : 0);
       const english = replies === 0 ? 'I am planning a trip. Can you help me figure out a practical plan?' : replies === 1 ? 'How would that fit my budget and the timing?' : 'What should I check before making the booking?';
       const thai = replies === 0 ? 'ฉันกำลังวางแผนเดินทาง ช่วยวางแผนที่ทำได้จริงให้หน่อยได้ไหม' : replies === 1 ? 'แล้วเรื่องงบประมาณกับเวลาควรจัดการอย่างไร' : 'ก่อนจองฉันควรตรวจสอบอะไรบ้าง';
-      result = { sourceText: fixtureLanguage === 'Thai' ? thai : english, englishText: english, reuseTurnId: '', scenarioOnly: true, goalResolved: replies >= 3 };
+      result = { sourceText: fixtureLanguage === 'Thai' ? thai : english, englishText: english, reuseTurnId: '', action: replies ? 'Asked a follow-up' : 'Asked a question', scenarioOnly: true, goalResolved: replies >= 3 };
     } else if (properties.recommendation) {
       const a = (payload.turns || []).find((t: any) => t.run === 'A' && t.speaker === 'model');
       const b = (payload.turns || []).find((t: any) => t.run === 'B' && t.speaker === 'model');
