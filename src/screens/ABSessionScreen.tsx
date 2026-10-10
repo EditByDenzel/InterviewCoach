@@ -35,7 +35,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const [loaded, setLoaded] = useState(false), [error, setError] = useState(''), [saveWarning, setSaveWarning] = useState('');
   const [draft, setDraft] = useState(''), [recording, setRecording] = useState(false), [paused, setPaused] = useState(false), [seconds, setSeconds] = useState(0);
   const [playingId, setPlayingId] = useState<string | null>(null), [progress, setProgress] = useState(0), [level, setLevel] = useState(0);
-  const [confirmClose, setConfirmClose] = useState(false), [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [autoListen, setAutoListen] = useState(true);
   const [viewMode, setViewMode] = useState<'chat' | 'voice'>('chat');
   const [muted, setMuted] = useState(false), [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
@@ -256,6 +256,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     if (!busy.current) await operate(endCurrent);
   };
   const close = async () => {
+    if (exiting.current) return;
     exiting.current = true;
     setupAbort.current.abort();
     try {
@@ -268,7 +269,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     } catch (err) {
       await capture.current!.dispose(); await stopPlayback(); capture.current = null;
       exiting.current = false; setRecording(false); setPaused(false); pausedRef.current = false;
-      setError((err as Error).message); setConfirmClose(false); showPhase('error'); return;
+      retry.current = close; setError((err as Error).message); showPhase('error'); return;
     }
     navigation.popToTop();
   };
@@ -306,7 +307,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       if (capture.current!.getSnapshot().recording) void capture.current!.pause();
       else { void stopPlayback(); showPhase('paused'); }
     });
-    const back = navigation.addListener('beforeRemove', e => { if (!exiting.current) { e.preventDefault(); setConfirmClose(true); } });
+    const back = navigation.addListener('beforeRemove', e => { if (!exiting.current) { e.preventDefault(); void close(); } });
     return () => { alive.current = false; setupAbort.current.abort(); unsubscribe(); appState?.remove(); back(); void capture.current!.dispose(); void stopPlayback(); };
   }, []);
   useEffect(() => {
@@ -394,7 +395,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   </>;
   return <DesignFrame chat>
     <View style={[chat.topHeader, narrow && {paddingHorizontal:8}]}>
-      <GlassButton label="Close A/B chat" onPress={() => setConfirmClose(true)} style={[chat.closePill,narrow && {paddingHorizontal:8}]}><DesignIcon name="close"/><Text style={chat.closeLabel}>Close chat</Text></GlassButton>
+      <GlassButton label="Close A/B chat" onPress={() => void close()} style={[chat.closePill,narrow && {paddingHorizontal:8}]}><DesignIcon name="close"/><Text style={chat.closeLabel}>Close chat</Text></GlassButton>
       <View style={[chat.headerRightControls,narrow && {gap:4}]}>
         <GlassButton label={viewMode === 'voice' ? 'Switch to chat view' : 'Switch to voice screen'} onPress={() => setViewMode(viewMode === 'voice' ? 'chat' : 'voice')} style={[chat.modeTogglePill,narrow && {paddingHorizontal:6}]}><Text style={chat.modeToggleText}>{viewMode === 'voice' ? 'Chat View' : 'Voice Mode'}</Text></GlassButton>
         <GlassButton label="End current model run" onPress={() => void finish()} disabled={!ongoing || phase === 'ending' || !session.turns.some(t => t.run === session.activeRun && t.speaker === 'tasker' && t.delivered)} style={chat.roundTrackerPill}><View style={chat.roundDot}/><Text style={chat.roundLabel}>Model {session.activeRun}</Text></GlassButton>
@@ -421,10 +422,6 @@ export default function ABSessionScreen({ navigation, route }: Props) {
         <View style={chat.footerInner}>{footerContent}</View>
       </View>
     </View></KeyboardAvoidingView>}
-    {confirmClose && <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmClose(false)}><View style={chat.modalBackdrop}><BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill}/><View style={chat.modalCard}>
-      <Text style={chat.modalTitle}>Close this chat?</Text><Text style={chat.modalSubtitle}>Your conversation and recordings will be saved.</Text>
-      <View style={chat.modalButtonsRow}><GlassButton label="Keep chatting" onPress={() => setConfirmClose(false)} style={chat.modalButton}><Text style={chat.modalButtonText}>Keep chatting</Text></GlassButton><GlassButton label="Save and close chat" onPress={() => void close()} style={[chat.modalButton,chat.endButton]}><Text style={chat.modalButtonText}>Save & close</Text></GlassButton></View>
-    </View></View></Modal>}
     {quickSettingsOpen && <Modal visible transparent animationType="fade" onRequestClose={() => setQuickSettingsOpen(false)}><View style={chat.modalBackdrop}><BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFill}/><View style={chat.quickSettingsCard}>
       <View style={chat.quickSettingsHeader}><Text style={chat.modalTitle}>Voice & Language</Text><GlassButton label="Close settings" onPress={() => setQuickSettingsOpen(false)} style={chat.quickCloseButton}><DesignIcon name="close"/></GlassButton></View>
       <Text style={chat.quickSettingsSubtitle}>{session.scenario.language} · {session.persona.voice}</Text>

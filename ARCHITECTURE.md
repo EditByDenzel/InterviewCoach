@@ -56,3 +56,5 @@ InterviewScreen/SummaryScreen preserve the prior five-round interview behavior f
 ## Verification boundary
 
 Jest includes pure domain/store/provider/audio tests plus actual ABSessionScreen rendering with controlled hardware/provider adapters. tests/acceptance/ab-session.feature is a specification without executable Gherkin bindings. The design preview is development-gated, uses dummy keys/silent audio and simulated capture, and blocks real provider calls. Production exports exclude that preview flag and private environment keys. Exports prove bundling, not physical device operation. See AB_IMPLEMENTATION_PLAN.md for the outstanding equal-priority iOS/Android matrix and language auditions.
+
+Home language selection uses serialized updateSettings({language}) without changing key fields. TopicComposer provides left-side photo clearance for short/multiline text. Close saves before navigating Home; failed saves remain retryable. scripts/start-main.cjs clears fixture/dotenv-disable flags and retains credentials.

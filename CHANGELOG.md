@@ -8,6 +8,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Home photo/language controls and automatic saving â€” 2026-10-11
+
+- Moved the photo icon inside the left edge of the Home topic composer with
+  clearance for short/multiline text. Its old toolbar slot now selects English,
+  Thai or Nigerian English. Partial settings saves preserve API keys and voice.
+- Removed repeated close confirmations from A/B and legacy chats. Close/back
+  saves before returning Home; failed saves stay open for retry, repeated close
+  taps are guarded, and explicit deletion still confirms.
+- Restored main-app loading of the existing local Gemini key: the previous main
+  process disabled dotenv. npm run web now uses a dedicated port 8083 launcher
+  that clears fixture/dotenv-disable flags without changing credentials. Local
+  .env stays ignored; fixture preview and key-free exports remain separate.
+- Verified 181 tests across 17 suites, TypeScript and whitespace checks. Added
+  automatic-close/save-failure and credential-preservation regression tests.
+  Main browser showed Gemini connected and the existing Thai preference. Home
+  controls and mock chat close were checked; no paid provider call was needed.
+
+
 ### Restore the original chat and remove scenario setup — 2026-10-11
 
 - Removed the mandatory scenario review screen and all launch-time goal, role,

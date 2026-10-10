@@ -1,11 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, TextInput, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { DESIGN } from './CoachieDesign';
 import { easeOut, MotionPressable, useMotion } from './Motion';
 
-export function TopicComposer({value,onChange,onSend}:{value:string;onChange:(value:string)=>void;onSend:()=>void}) {
+export function TopicComposer({value,onChange,onSend,onPhoto}:{value:string;onChange:(value:string)=>void;onSend:()=>void;onPhoto?:()=>void}) {
   const {reduced}=useMotion();
   const [focused,setFocused]=useState(false),[contentHeight,setContentHeight]=useState(24);
   const input=useRef<TextInput>(null);
@@ -35,8 +35,9 @@ export function TopicComposer({value,onChange,onSend}:{value:string;onChange:(va
       onContentSizeChange={event=>{if(Platform.OS!=='web')setContentHeight(Math.max(24,event.nativeEvent.contentSize.height));}}
       onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
       onKeyPress={event=>{if(Platform.OS==='web'&&event.nativeEvent.key==='Enter'&&!(event as any).shiftKey&&!(event.nativeEvent as any).shiftKey&&!(event.nativeEvent as any).isComposing){event.preventDefault();if(value.trim())onSend();}}}
-      placeholder="Your scenario or topic…" placeholderTextColor="#C5AEA0" style={[styles.input,{bottom:contentHeight>30?62:22},Platform.OS==='web'&&({outline:'none',boxShadow:'none',resize:'none',scrollbarWidth:'none',overflowY:contentHeight>168?'auto':'hidden',overflowX:'hidden'} as any)]}/>
+      placeholder="Your scenario or topic…" placeholderTextColor="#C5AEA0" style={[styles.input,{bottom:contentHeight>30?62:22,left:onPhoto&&contentHeight<=30?64:16},Platform.OS==='web'&&({outline:'none',boxShadow:'none',resize:'none',scrollbarWidth:'none',overflowY:contentHeight>168?'auto':'hidden',overflowX:'hidden'} as any)]}/>
     {Platform.OS==='web'&&React.createElement('style',null,'#coachie-topic::-webkit-scrollbar{display:none} #coachie-topic:focus{outline:none!important;box-shadow:none!important}')}
+    {onPhoto && <MotionPressable accessibilityRole="button" accessibilityLabel="Import scenario from photo" onPress={onPhoto} style={[styles.send,{position:'absolute',left:12,bottom:12,zIndex:2}]}><Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#D8C9C1" strokeWidth={1.6}><Path d="M8 5l1-2h6l1 2h4v15H4V5h4Z"/><Circle cx={12} cy={12} r={4}/></Svg></MotionPressable>}
     <View style={styles.actions}><MotionPressable accessibilityRole="button" accessibilityLabel="Start conversation" disabled={!value.trim()} onPress={onSend} style={[styles.send,value.trim()?styles.ready:undefined]}><Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><Path d="M12 19V5m-6 6 6-6 6 6"/></Svg></MotionPressable></View>
   </Animated.View>;
 }

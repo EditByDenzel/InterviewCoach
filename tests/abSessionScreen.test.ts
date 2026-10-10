@@ -261,7 +261,7 @@ describe('Real A/B screen integration with controlled device and provider bounda
     expect(reservedId).not.toBe('');
     expect(mockSaved!.turns[0].audioAssetId).toBe(reservedId);
     expect(mockAssets.has(reservedId)).toBe(false);
-    await press('Close A/B chat'); await press('Save and close chat');
+    await press('Close A/B chat');
     expect(navigation.popToTop).toHaveBeenCalledTimes(1);
     expect(mockSaved!.turns[0]).toMatchObject({ audioAssetId: reservedId, delivered: false });
     await act(async () => {
@@ -314,10 +314,22 @@ describe('Real A/B screen integration with controlled device and provider bounda
 
   it('closes while permission is pending without starting the microphone afterward', async () => {
     const permission = deferred<boolean>(); mockPermission.mockReturnValueOnce(permission.promise);
-    await mount(); await press('Start Model A'); await press('Close A/B chat'); await press('Save and close chat');
+    await mount(); await press('Start Model A'); await press('Close A/B chat');
     expect(navigation.popToTop).toHaveBeenCalledTimes(1);
     await act(async () => { permission.resolve(true); await flush(); });
     expect(mockStartRecording).not.toHaveBeenCalled();
+  });
+
+  it('saves and closes in one action without asking, but keeps a failed save retryable', async () => {
+    await mount(); await startWithoutAutoListen();
+    mockSave.mockRejectedValueOnce(new Error('Storage unavailable'));
+    await press('Close A/B chat');
+    expect(navigation.popToTop).not.toHaveBeenCalled();
+    expect(visibleText()).toContain('Storage unavailable');
+    expect(visibleText()).not.toContain('Close this chat?');
+    await press('Retry failed action');
+    expect(navigation.popToTop).toHaveBeenCalledTimes(1);
+    expect(mockSaved!.turns).toHaveLength(1);
   });
 
   it('recovers from an empty recording through explicit deletion without losing the opener or inventing a reply', async () => {

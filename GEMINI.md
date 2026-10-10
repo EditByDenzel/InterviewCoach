@@ -14,3 +14,5 @@ Read PROJECT_CONTEXT.md, AB_IMPLEMENTATION_PLAN.md and ARCHITECTURE.md for curre
 - Run npm test -- --runInBand, npx tsc --noEmit and git diff --check before commit. Update CHANGELOG.md and distinguish simulated checks from physical/device/provider results.
 
 Provider documentation used in the research: https://ai.google.dev/gemini-api/docs/speech-generation. Further sources and audition criteria are in VOICE_CONVERSATION_RESEARCH.md.
+
+Main launch must load the existing local .env and prefer nonempty saved keys. EXPO_NO_DOTENV=1 is for fixture/export checks only. npm run web uses scripts/start-main.cjs to avoid disabling main-app credentials.

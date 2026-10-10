@@ -123,7 +123,6 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const setPaused = (next: boolean) => { pausedRef.current = next; setPausedState(next); };
   const [seconds, setSeconds] = useState(0);
   const [muted, setMuted] = useState(false);
-  const [confirmClose, setConfirmClose] = useState(false);
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [selectedLang, setSelectedLang] = useState('English');
   const [selectedVoice, setSelectedVoice] = useState('Kore');
@@ -467,10 +466,16 @@ export default function InterviewScreen({ navigation, route }: Props) {
   };
 
   const close = async () => {
+    if (exiting.current) return;
     exiting.current = true;
     alive.current = false;
     resumeSpeech.current?.(); resumeSpeech.current = null;
-    await persist();
+    const warning = await persist();
+    if (warning) {
+      alive.current = true; exiting.current = false;
+      setHistoryWarning(warning); setError('Could not save this chat. Please retry before closing.'); retry.current = close;
+      return;
+    }
     await Promise.allSettled([stopPlayback(), recordingSession.current?.dispose(), stopCandidate()]);
     navigation.popToTop();
   };
@@ -529,7 +534,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
     const unsub = navigation.addListener('beforeRemove', (e) => {
       if (exiting.current) return;
       e.preventDefault();
-      setConfirmClose(true);
+      void close();
     });
     return () => {
       alive.current = false;
@@ -706,7 +711,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
     <DesignFrame chat>
       {/* Top Header Navigation */}
       <View style={styles.topHeader}>
-        <GlassButton label="Close chat" onPress={() => setConfirmClose(true)} style={styles.closePill}>
+        <GlassButton label="Close chat" onPress={() => void close()} style={styles.closePill}>
           <DesignIcon name="close" />
           <Text style={styles.closeLabel}>Close chat</Text>
         </GlassButton>
@@ -929,27 +934,6 @@ export default function InterviewScreen({ navigation, route }: Props) {
           </View>
         </KeyboardAvoidingView>
       )}
-
-      {/* Confirmation Modal to Exit Chat */}
-      <Modal visible={confirmClose} transparent animationType="fade" onRequestClose={() => setConfirmClose(false)}>
-        <View style={styles.modalBackdrop}>
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>End this interview?</Text>
-            <Text style={styles.modalSubtitle}>
-              {historyWarning ? 'Local saving is unavailable.' : 'Your session will be saved in Recent conversations.'}
-            </Text>
-            <View style={styles.modalButtonsRow}>
-              <GlassButton label="Continue interview" onPress={() => setConfirmClose(false)} style={styles.modalButton}>
-                <Text style={styles.modalButtonText}>Keep practicing</Text>
-              </GlassButton>
-              <GlassButton label="End session" onPress={() => void close()} style={[styles.modalButton, styles.endButton]}>
-                <Text style={[styles.modalButtonText, { color: '#FF7536' }]}>End session</Text>
-              </GlassButton>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Voice & Language Quick Setting Modal */}
       <Modal visible={quickSettingsOpen} transparent animationType="fade" onRequestClose={() => setQuickSettingsOpen(false)}>

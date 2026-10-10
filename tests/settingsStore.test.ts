@@ -77,4 +77,18 @@ describe('Settings Store', () => {
       warning.mockRestore();
     }
   });
+
+  it('uses local env credentials as fallback and preserves a saved key when Home changes language', async () => {
+    const previous = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    try {
+      process.env.EXPO_PUBLIC_GEMINI_API_KEY = 'local-fixture-key';
+      expect(await getGeminiApiKey()).toBe('local-fixture-key');
+      await saveSettings({geminiApiKey:'user-saved-key',elevenLabsApiKey:'',ttsProvider:'gemini'});
+      await updateSettings({language:'Thai'});
+      expect(await loadSettings()).toMatchObject({geminiApiKey:'user-saved-key',language:'Thai'});
+    } finally {
+      if (previous === undefined) delete process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+      else process.env.EXPO_PUBLIC_GEMINI_API_KEY = previous;
+    }
+  });
 });

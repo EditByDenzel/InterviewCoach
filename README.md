@@ -9,11 +9,11 @@ npm ci
 npm start
 ```
 
-Use an SDK 51-compatible client or development build. Android and iPhone are both targets; physical-device validation and distributable builds remain pending. `npm run web` opens the normal browser app. Enter your Gemini key through Home's Settings icon, then select a language and voice. The new A/B flow uses Gemini text, transcription and TTS; ElevenLabs remains an optional legacy-interview provider. Model availability and billing depend on your provider account.
+Use an SDK 51-compatible client or development build. Android and iPhone are both targets; physical-device validation and distributable builds remain pending. `npm run web` opens the main app on port 8083 and loads the existing local `.env`; saved keys take precedence. Enter your Gemini key through Home's Settings icon, then select a language and voice. The new A/B flow uses Gemini text, transcription and TTS; ElevenLabs remains an optional legacy-interview provider. Model availability and billing depend on your provider account.
 
 ## Scenario flow
 
-1. Type a topic/scenario or tap Photo to capture/import an image.
+1. Type a topic or tap the photo icon inside the left side of the composer. Use the saved language selector below it.
 2. Sending the topic opens the original chat and starts Model A. Photo instructions are extracted in the background; there is no scenario setup form or invented personal goal. Saved voice/language preferences apply, with explicit photo instructions retained internally.
 3. The original chat cards, gradients, footer and controls remain, with Model A/B dividers. Tap the Model A/B header pill to finish that run.
 4. Coachie speaks in the selected language. Record the model's answer with automatic listening or manual controls; pause, stop or replay as needed.
@@ -27,7 +27,7 @@ Thai, English and Nigerian English character directions are provided for ordinar
 
 ## History and privacy
 
-A/B transcripts, original/translated wording, comparisons and recordings stay locally until explicit deletion. Audio uses native document files or browser IndexedDB; metadata and settings use AsyncStorage. Local storage is not a cloud backup: uninstalling the app or clearing browser/OS storage can remove it. An unfinished unusable recording can be explicitly deleted to retry capture. Legacy sessions without retained audio show transcripts only.
+Chats save automatically on close, without a repeated confirmation. A save failure stays open for retry. Chats save automatically on close without a repeated confirmation. A save failure stays open for retry. A/B transcripts, original/translated wording, comparisons and recordings stay locally until explicit deletion. Audio uses native document files or browser IndexedDB; metadata and settings use AsyncStorage. Local storage is not a cloud backup: uninstalling the app or clearing browser/OS storage can remove it. An unfinished unusable recording can be explicitly deleted to retry capture. Legacy sessions without retained audio show transcripts only.
 
 Scenario images, recordings, transcripts and relevant conversation context are sent to Google for extraction, transcription, translation, dialogue or evaluation. Available original model recordings are included in the final audio assessment; missing audio and unverified factual/search claims are reported as limitations. Keys are stored locally in AsyncStorage, which is not an encrypted credential vault. Never commit keys or private media. An `EXPO_PUBLIC_GEMINI_API_KEY` can seed development settings, but Expo public values are embedded in bundles: omit private keys from distributed builds.
 

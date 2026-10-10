@@ -6,7 +6,7 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
+    "web": "node scripts/start-main.cjs",
     "test": "jest",
     "preview:design": "node scripts/preview-design.cjs"
   },

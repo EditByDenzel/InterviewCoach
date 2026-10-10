@@ -6,7 +6,7 @@ Updated 11 October 2026. Core independent A/B practice code is implemented. The 
 
 Coachie runs on a phone and acts as the tasker. The evaluated models speak from a computer, captured through the phone microphone. iPhone and Android have equal priority. This is acoustic capture, not access to computer system audio.
 
-Start from a topic or photo directly in the original chat. No scenario setup or goal form: use saved voice/language and process explicit project instructions internally. Simple topics do not need extraction or invented personal facts. Photo instructions retain role, objective, facts, constraints, time, search and priorities in background context. Website navigation, general platform instructions and microphone errors are not scenario facts. Unreadable details remain uncertain.
+Start from a topic or photo directly in the original chat. Home photo sits inside the left side of the composer; its former toolbar slot saves the speaking language. Home photo sits inside the left side of the composer; its former toolbar slot saves the speaking language. No scenario setup or goal form: use saved voice/language and process explicit project instructions internally. Simple topics do not need extraction or invented personal facts. Photo instructions retain role, objective, facts, constraints, time, search and priorities in background context. Website navigation, general platform instructions and microphone errors are not scenario facts. Unreadable details remain uncertain.
 
 When Thai is selected, tasker speech and original model recordings stay Thai; English translations are the primary visible conversation. Original source text stays in background context/evidence. English and Nigerian English are also supported character directions. Nigerian English does not mean Pidgin.
 
@@ -38,7 +38,7 @@ Renderer checks cover stage-specific saves, audio ownership, translation recover
 
 Session lifecycle: ready_a -> active_a -> waiting_b -> active_b -> comparing -> completed. Each turn carries original wording, English translation, audio reference and delivery metadata. pendingReply retains captured audio and any completed source transcription while translation or saving is retried.
 
-Unplayed tasker text must not enter model context or evaluation. Replay does not append a turn. Retry resumes the failed stage rather than resubmitting an accepted answer, generating a second question, or treating interrupted playback as complete. Persist at captured-reply, accepted-turn, A/B-switch, comparison and vote boundaries.
+Unplayed tasker text must not enter model context or evaluation. Replay does not append a turn. Retry resumes the failed stage rather than resubmitting an accepted answer, generating a second question, or treating interrupted playback as complete. Persist at captured-reply, accepted-turn, A/B-switch, comparison and vote boundaries. Closing saves automatically, keeps failures open for retry and guards repeated taps. Closing saves automatically without prompting, keeps failures open for retry, and guards repeated taps.
 
 Recordings and transcripts remain until explicit deletion; there is no automatic age-based eviction. Native files and browser IndexedDB are local storage, not cloud backup. App removal, browser storage clearing or OS eviction may still remove data.
 
