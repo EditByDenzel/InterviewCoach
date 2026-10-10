@@ -8,6 +8,7 @@ documents disagree with it.
   truth; do not maintain a second folder by manually copying files.
 - Preserve the existing five-round flow, models, voices, dark theme, and settings
   behavior unless the user requests a change.
+- Preserve the original chat cards, gradients, custom footer/buttons and hidden scrollbars. A/B adds model dividers and run transitions; scenario processing belongs in the background, never a mandatory setup/goal form.
 - Never commit API keys, `.env`, recordings, dependencies, or generated bundles.
 - Run `npm test -- --runInBand` and `npx tsc --noEmit` before committing.
 - Inspect Git status first and preserve unrelated or concurrent work. Pull with

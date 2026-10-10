@@ -1,12 +1,12 @@
 # Coachie scenario A/B conversation brief
 
-Updated 10 October 2026. Core A/B code is implemented; the user selected completed-reply transcription. Listening auditions and physical-device acceptance remain unverified. See AB_IMPLEMENTATION_PLAN.md for source mapping and delivery status.
+Updated 11 October 2026. Core A/B code is implemented; the user selected completed-reply transcription. Listening auditions and physical-device acceptance remain unverified. See AB_IMPLEMENTATION_PLAN.md for source mapping and delivery status.
 
 ## Confirmed intent
 
 - Coachie plays the tasker asking another assistant questions and following up, not an interviewer grading the user.
 - Coachie runs on a phone; the models play audio on a computer. iPhone and Android are equally important.
-- Start from typed scenario text or a camera photo/screenshot; review the extracted role, goal, facts, constraints, language and timing in English.
+- A topic or photo opens the original chat directly. Use saved preferences and interpret project instructions in the background; no scenario form or required personal goal.
 - Thai-selected sessions speak and record Thai. Original Thai remains background context/evidence; both speakers' primary chat text is English.
 - Offer ordinary adult Thai, English and Nigerian English character directions in their twenties/thirties. Keep one profile fixed across A/B. Nigerian English does not automatically mean Pidgin.
 - Preserve automatic listening plus manual capture, stop, pause and replay.
@@ -24,13 +24,12 @@ B has fresh reasoning history despite sharing the visible chat. Only fixed scena
 
 ## Implemented core flow
 
-1. Type or photograph the scenario.
-2. Review/edit its English title, role, objective, facts, constraints, speaking language, duration, optional minimum exchanges, search requirement and priorities. Preserve uncertainty; website navigation and errors are not scenario facts.
-3. Choose a character, optionally preview it and explicitly start A.
-4. Speak in the selected language, capture each model reply, store source evidence, translate into English and choose a relevant next turn.
-5. End A, preserve its transcript and wait at the Model B divider.
-6. Explicitly start B with the same opener and isolated history.
-7. Review evidence, limitations and recommendation, then choose A, B, tie or insufficient evidence independently.
+1. Send a topic or photo from Home; the original chat opens immediately.
+2. Prepare photo instructions in the background and use saved voice/language preferences.
+3. Start A automatically, preserving the original cards, gradient mic, footer and buttons.
+4. Record completed replies, retain original source text and show English transcripts.
+5. Finish A using its header pill, switch the computer model and start B below its divider.
+6. Compare after both runs and choose an independent vote.
 
 Legacy interviews remain separately readable. The new screen/store do not turn old interviews into fabricated A/B comparisons.
 

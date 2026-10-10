@@ -1,12 +1,12 @@
 # Coachie A/B implementation plan and delivery status
 
-Updated 10 October 2026. Core independent A/B practice code is implemented. The user selected transcription after each completed reply; live captions are optional future work. Listening auditions and physical-device acceptance remain unverified. This document distinguishes code and mocked checks from actual device/provider results.
+Updated 11 October 2026. Core independent A/B practice code is implemented. The user selected transcription after each completed reply; live captions are optional future work. Listening auditions and physical-device acceptance remain unverified. This document distinguishes code and mocked checks from actual device/provider results.
 
 ## Confirmed product decisions
 
 Coachie runs on a phone and acts as the tasker. The evaluated models speak from a computer, captured through the phone microphone. iPhone and Android have equal priority. This is acoustic capture, not access to computer system audio.
 
-Start from a typed topic/scenario or camera photo/screenshot. Review the extracted scenario in English before starting. The title alone is insufficient: role, objective, facts, constraints, speaking language, duration, optional minimum exchanges, search requirement and ordered evaluation priorities matter. Website navigation, general platform instructions and microphone errors are not scenario facts. Unreadable details remain uncertain.
+Start from a topic or photo directly in the original chat. No scenario setup or goal form: use saved voice/language and process explicit project instructions internally. Simple topics do not need extraction or invented personal facts. Photo instructions retain role, objective, facts, constraints, time, search and priorities in background context. Website navigation, general platform instructions and microphone errors are not scenario facts. Unreadable details remain uncertain.
 
 When Thai is selected, tasker speech and original model recordings stay Thai; English translations are the primary visible conversation. Original source text stays in background context/evidence. English and Nigerian English are also supported character directions. Nigerian English does not mean Pidgin.
 
@@ -22,7 +22,7 @@ The reviewed private Live S2S reference clarifies comparison principles and scen
 
 | Area | Source | Current core |
 |---|---|---|
-| Scenario import/review | src/screens/ScenarioScreen.tsx; src/services/scenarioImportService.ts; src/services/scenarioImagePicker.ts | Typed/photo input, camera/library adapter, structured extraction, allowlist validation, editable English review and uncertainty |
+| Background topic/photo context | src/services/conversationSetup.ts; src/services/scenarioImportService.ts; src/services/scenarioImagePicker.ts | Direct topic launch, saved preferences, background photo extraction, allowlist validation and uncertainty; no setup screen |
 | Domain | src/domain/abSession.ts | Scenario/persona snapshot, A/B lifecycle, stable turn IDs, idempotent acceptance, separate contexts, duration rules, exact synthesis cache identity, comparison/vote |
 | Dialogue/translation | src/services/abConversationService.ts | Tasker behavior, active-run context, original/English text, validated reusable clips and evidence-linked comparison |
 | Provider boundary | src/services/geminiService.ts | Request/body deadlines, multipart text, truncation detection, expanded transcription budget, selected-voice/style synthesis |
@@ -64,10 +64,10 @@ Missing/corrupt audio is a limitation, not a model failure. Coachie's speech can
 |---|---|
 | 0 — Baseline/reference review | Device arrangement and equal OS priority confirmed; physical acoustic baseline outstanding |
 | 1 — Domain/storage | Implemented with deterministic domain/store and screen save/retry checks |
-| 2 — Topic/camera | Extraction, picker and English review implemented; real permissions, orientation, glare, diacritics and Android activity recreation outstanding |
+| 2 — Topic/camera | Direct launch, background extraction and picker implemented; real permissions, orientation, glare, diacritics and Android activity recreation outstanding |
 | 3 — Bilingual tasker | Core and mocked contracts implemented; fluent-language and live-provider results unverified |
 | 4 — Audio and completed-reply transcription | Selected flow implemented: capture -> stop -> source transcription -> English translation -> follow-up. Live captions are optional future work |
-| 5 — A/B interface/recovery | Separate A/B screen implemented, legacy preserved; renderer/fixture retry, reload and model-boundary checks passed |
+| 5 — A/B interface/recovery | Original chat design restored with A/B dividers and background orchestration; legacy preserved; renderer/fixture retry, reload and model-boundary checks passed |
 | 6 — Reuse/voice | Cache identity, opener reuse and safe follow-up selection implemented. **Listening auditions, accent fidelity and measured savings unverified** |
 | 7 — Comparison | Evidence references, abstention and independent vote implemented; grounded verification and blinded judge review outstanding |
 | 8 — Release validation | Automated checks available. **Physical iOS and Android tests outstanding**, including real latency, acoustic echo and OS interruptions |

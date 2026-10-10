@@ -10,7 +10,6 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from 'react-native-paper';
 import { easeOut, useMotion } from '../components/Motion';
 import ConversationScreen from '../screens/ConversationScreen';
-import ScenarioScreen from '../screens/ScenarioScreen';
 import ABSessionScreen from '../screens/ABSessionScreen';
 
 import { RootStackParamList } from '../types';
@@ -51,7 +50,6 @@ export default function AppNavigator() {
           component={HomeScreen}
           options={{ title: 'Coachie', headerShown: false }}
         />
-        <Stack.Screen name="Scenario" component={ScenarioScreen} />
         <Stack.Screen name="ABSession" component={ABSessionScreen} options={{gestureEnabled:false}} />
         <Stack.Screen
           name="Interview"

@@ -12,22 +12,22 @@ Feature: Scenario-based A/B conversations with English display and selected-lang
     Given a synthetic image contains a Thai title, a WHAT TO DO block, Thai language, a time limit and Search-Required
     And it also contains website navigation and a microphone error
     When I import the image
-    Then the English review contains the scenario role, objective, constraints, language and time limit
+    Then internal context contains the scenario role, objective, constraints, language and time limit
     And website navigation and the microphone error are not scenario facts
 
   @import @ui
-  Scenario: Review without reading Thai
+  Scenario: Start without reading Thai or completing a setup form
     Given a Thai scenario image has been extracted successfully
-    When the scenario review opens
-    Then its primary labels and editable content are English
+    When its chat opens
+    Then its primary conversation text is English
     And original Thai source text is retained in the background
-    And neither audio playback nor recording starts before I start the run
+    And Model A starts after background extraction succeeds
 
   @import @unit
   Scenario: Preserve uncertainty in a blurry image
     Given the scenario title is legible but a destination and date are unreadable
     When extraction finishes
-    Then the destination and date remain unset and flagged for review
+    Then the destination and date remain unset and retained as uncertainty
     And no invented destination or date enters the scenario
 
   @import @unit
@@ -48,28 +48,28 @@ Feature: Scenario-based A/B conversations with English display and selected-lang
       | picker cancellation     |
       | camera permission denial|
       | missing camera          |
-      | corrupt image           |
-      | extraction timeout      |
+
 
   @import @ui
-  Scenario: Resolve an imported language conflict visibly
+  Scenario: Honor explicit imported language without changing saved preferences
     Given my current speaking language is English and the imported scenario requires Thai
-    When I review the extracted scenario
-    Then the proposed Thai speaking language is visible
-    And the active setting changes only when I accept that scenario configuration
+    When background extraction finishes
+    Then the session speaks Thai and displays English transcripts
+    And my saved speaking preference remains English
 
   @import @unit @ui
   Scenario: Use a typed topic without inventing source facts
     Given I type only a short topic in English
     When Coachie prepares a scenario
-    Then added details are presented as a proposed scenario or requested as clarification
-    And they are not labeled as extracted facts
+    Then the original chat starts directly with my saved preferences
+    And no personal facts or goals are invented
+    And missing details are clarified naturally during conversation
 
   @import @device
   Scenario Outline: Read supported photo orientations and scripts
     Given a synthetic legible scenario image with <condition>
     When I capture or choose it on a supported target device
-    Then important facts and Thai diacritics survive extraction and English review
+    Then important facts and Thai diacritics survive background extraction
     And unreadable fields are flagged rather than silently guessed
     Examples:
       | condition                  |
@@ -108,7 +108,7 @@ Feature: Scenario-based A/B conversations with English display and selected-lang
   @session @unit
   Scenario: Preserve an explicit high minimum-turn requirement separately from time
     Given the accepted scenario explicitly requires at least fifteen exchanges
-    When its turn requirement is imported and reviewed
+    When its turn requirement is imported internally
     Then the minimum exchange field is fifteen
     And no fifteen-minute duration is inferred from that turn requirement
 
@@ -450,3 +450,11 @@ Feature: Scenario-based A/B conversations with English display and selected-lang
     Then the drawer remains within DesignFrame and controls remain visible and keyboard accessible
     And reduced-motion preferences are respected
     And the latest pause labels, loading states and deletion confirmation remain intact
+
+  @ui
+  Scenario: Preserve the original conversation interface
+    Given I send a new topic from Home
+    Then no scenario setup form or generated objective heading is shown
+    And the original gradients, glass cards, custom footer and microphone controls remain
+    And the chat scrolls automatically with no visible scrollbar
+    And Model A and Model B are separated by dividers

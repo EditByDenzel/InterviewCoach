@@ -1,6 +1,6 @@
 # Coachie project handoff
 
-Updated 10 October 2026.
+Updated 11 October 2026.
 
 ## Working location
 
@@ -8,9 +8,9 @@ Develop in the original InterviewCoach checkout. GitHub repository: https://gith
 
 ## Current product
 
-Home -> Scenario review -> A/B session. Coachie is the tasker, asking another assistant for help. Phone microphone captures models playing on a computer. Both Android and iPhone are targets. Typed topics and camera/library images become an editable English review with role, goal, facts, constraints, language, time, optional minimum exchanges, search requirement and priorities.
+Home -> original chat with A/B dividers; no scenario setup screen. Coachie is the tasker, asking another assistant for help. Phone microphone captures models playing on a computer. Both Android and iPhone are targets. Topics start directly with saved preferences. Photo instructions become internal scenario context without a review form. Do not require user goals, roles, facts, timing or priorities at launch.
 
-A starts explicitly; B starts manually after a divider, with the same opener/persona/scenario and separate reasoning history. Natural adaptive follow-ups replace a fixed question count. Duration is scenario-specific, and the maximum takes precedence over optional minimum exchanges. Comparison follows both runs, uses delivered turn evidence and available original model audio, and retains a separate user vote. Missing capture is not a model failure; search and factual accuracy are not independently verified.
+Sending a new topic/photo starts A; B starts manually after a divider, with the same opener/persona/scenario and separate reasoning history. Natural adaptive follow-ups replace a fixed question count. Duration is scenario-specific, and the maximum takes precedence over optional minimum exchanges. Comparison follows both runs, uses delivered turn evidence and available original model audio, and retains a separate user vote. Missing capture is not a model failure; search and factual accuracy are not independently verified.
 
 The user confirmed whole-reply transcription: record -> stop -> source transcription -> English translation -> follow-up. Thai source stays in background context while English is visible. Live captions are optional future work, not a release requirement. Thai, English and Nigerian English profiles are adult character directions requiring real auditions. A/B uses Gemini; existing interview/summary routes, settings and old history remain supported separately.
 

@@ -5,6 +5,7 @@ Read PROJECT_CONTEXT.md, AB_IMPLEMENTATION_PLAN.md and ARCHITECTURE.md for curre
 - Runtime: React Native / Expo SDK 51, TypeScript, React Native Paper and shared orange design/motion components.
 - Configured text/transcription model: gemini-3.8-flash, through generateContent. Require complete responses and bounded fetch/body deadlines.
 - Configured A/B TTS model: gemini-3.8-flash-tts, through Interactions with response_format audio and generation_config.speech_config voice. Keep literal source text separate from speech_metadata.style; default WAV output must not be wrapped again as assumed raw PCM.
+- Preserve the original chat UI; only A/B dividers and run transitions extend the flow. No setup form, generated scenario heading, or visible goal/time metadata. Handle instructions internally with saved preferences.
 - Keep selected language, persona and opener consistent across runs. Thai source remains background context; English is visible. Nigerian English is not Pidgin by default.
 - Transcription happens after each finished recording. Live PCM/captions are optional future work.
 - A/B always uses Gemini; ElevenLabs remains an optional legacy interview provider. Do not claim measured naturalness, latency or provider access without a live check.

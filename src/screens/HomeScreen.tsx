@@ -5,6 +5,7 @@ import { StackScreenProps } from '@react-navigation/stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { RootStackParamList, SavedConversation } from '../types';
+import { pickScenarioImage } from '../services/scenarioImagePicker';
 import { loadSettings } from '../store/settingsStore';
 import { loadConversationLibrary } from '../store/conversationLibrary';
 import { DesignFrame, DesignIcon, GlassButton, DESIGN, ProfileIcon } from '../components/CoachieDesign';
@@ -102,14 +103,23 @@ export default function HomeScreen({navigation,route}:Props) {
     }
     setHasApiKey(true);
     setValidation('');
-    navigation.navigate('Scenario',{draft:topic.trim()});
+    navigation.navigate('ABSession',{topic:topic.trim()});
   }).catch(()=>setValidation('Could not load your settings. Please try again.')).finally(()=>{starting.current=false;});
+ };
+ const startPhoto = async () => {
+   if (starting.current) return;
+   starting.current = true; setValidation('');
+   try {
+     const image = await pickScenarioImage('camera');
+     if (image) navigation.navigate('ABSession', { topic: topic.trim(), image });
+   } catch (error) { setValidation((error as Error).message || 'Could not open the photo. Try again.'); }
+   finally { starting.current = false; }
  };
  return <DesignFrame><KeyboardAvoidingView aria-hidden={sidebar} accessibilityElementsHidden={sidebar} importantForAccessibility={sidebar?'no-hide-descendants':'auto'} style={styles.fill} behavior={Platform.OS==='ios'?'padding':undefined}>
   <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
    <View style={styles.header}><View style={styles.brand}><MotionPressable accessibilityRole="button" accessibilityLabel="Coachie settings" onPress={()=>navigation.navigate('Settings')} style={styles.logo}><ProfileIcon size={22} color="#FFF"/></MotionPressable><View><Text style={styles.brandName}>Coachie,</Text><Text style={styles.welcome}>Welcome back</Text></View></View><GlassButton label="Recent conversations" onPress={()=>{setSidebar(true);void refreshHistory();}} style={styles.menu}><DesignIcon name="menu"/></GlassButton></View>
     <View style={styles.heroGroup}><Text style={styles.title}>{mostRecentUserConv ? 'Continue or start\na conversation.' : 'Start a\nconversation here.'}</Text><ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards} style={styles.cardScroll}>{displaySuggestions.map(item=><MotionPressable lift key={item.id} accessibilityRole="button" accessibilityLabel={`Open ${item.topic}`} onPress={()=>navigation.navigate('Conversation',{id:item.id})} style={styles.card}><LinearGradient pointerEvents="none" colors={(item as any).isRecent ? ['#6E2C10', '#321307'] : ['#44271A', '#20130E']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/><View style={styles.cardTopRow}><DesignIcon name={item.icon}/></View><View style={{gap:4}}><Text numberOfLines={2} style={styles.cardLabel}>{item.label}</Text><Text style={styles.sampleMeta}>{(item as any).isRecent ? `${item.rounds} ${(item as any).isAB?'replies · A/B':item.rounds===1?'round':'rounds'} · ${(item as any).status}` : `${item.rounds} rounds`}</Text></View></MotionPressable>)}</ScrollView></View>
-    <View style={styles.composerArea}><TopicComposer value={topic} onChange={value=>{setTopic(value);setValidation('');}} onSend={start}/>{!!validation&&<View style={styles.validationArea}><Text accessibilityLiveRegion="polite" style={styles.validation}>{validation}</Text>{!hasApiKey&&<MotionPressable accessibilityRole="button" onPress={()=>navigation.navigate('Preferences',{page:'keys'})} style={styles.keyAction}><Text style={styles.keyLabel}>Add API key</Text></MotionPressable>}</View>}<View style={styles.toolbar}><GlassButton label="AI model and voice settings" onPress={()=>navigation.navigate('Preferences',{page:'voice'})} style={styles.model}><Text style={styles.modelText}>Gemini 3.8 Flash</Text><DesignIcon name="chevron"/></GlassButton><GlassButton label="Import scenario from photo" onPress={()=>navigation.navigate('Scenario',{draft:topic,photo:true})} style={[styles.model,{paddingHorizontal:12}]}><Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#D8C9C1" strokeWidth={1.6}><Path d="M8 5l1-2h6l1 2h4v15H4V5h4Z"/><Circle cx={12} cy={12} r={4}/></Svg><Text style={styles.modelText}>Photo</Text></GlassButton></View></View>
+    <View style={styles.composerArea}><TopicComposer value={topic} onChange={value=>{setTopic(value);setValidation('');}} onSend={start}/>{!!validation&&<View style={styles.validationArea}><Text accessibilityLiveRegion="polite" style={styles.validation}>{validation}</Text>{!hasApiKey&&<MotionPressable accessibilityRole="button" onPress={()=>navigation.navigate('Preferences',{page:'keys'})} style={styles.keyAction}><Text style={styles.keyLabel}>Add API key</Text></MotionPressable>}</View>}<View style={styles.toolbar}><GlassButton label="AI model and voice settings" onPress={()=>navigation.navigate('Preferences',{page:'voice'})} style={styles.model}><Text style={styles.modelText}>Gemini 3.8 Flash</Text><DesignIcon name="chevron"/></GlassButton><GlassButton label="Import scenario from photo" onPress={()=>void startPhoto()} style={[styles.model,{paddingHorizontal:12}]}><Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#D8C9C1" strokeWidth={1.6}><Path d="M8 5l1-2h6l1 2h4v15H4V5h4Z"/><Circle cx={12} cy={12} r={4}/></Svg><Text style={styles.modelText}>Photo</Text></GlassButton></View></View>
    </ScrollView>
   </KeyboardAvoidingView><ConversationSidebar open={sidebar} onClose={()=>setSidebar(false)} conversations={conversations} error={historyError} loading={loadingHistory} onRetry={()=>void refreshHistory()} onNew={()=>{setTopic('');setValidation('');}} onSelect={id=>{setSidebar(false);navigation.navigate('Conversation',{id});}}/></DesignFrame>;
 }

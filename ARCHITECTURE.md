@@ -1,10 +1,10 @@
 # Coachie architecture
 
-Updated 10 October 2026. React Native 0.74 / Expo SDK 51 / React 18.2 / TypeScript. Component-local refs own asynchronous work; pure domain functions and serialized stores enforce durable boundaries.
+Updated 11 October 2026. React Native 0.74 / Expo SDK 51 / React 18.2 / TypeScript. Component-local refs own asynchronous work; pure domain functions and serialized stores enforce durable boundaries.
 
 ## Navigation and domain
 
-HomeScreen sends typed/photo input to ScenarioScreen. scenarioImagePicker.ts handles camera/library and permission/cancellation; scenarioImportService.ts extracts structured English fields, validates allowed languages/time and preserves uncertainty. The user reviews before navigation to ABSessionScreen.
+HomeScreen sends topic/photo input directly to ABSessionScreen. conversationSetup.ts uses saved language for simple topics without a separate extraction request or invented facts. Photos use scenarioImportService.ts in the background to preserve explicit instructions and uncertainty. scenarioImagePicker.ts handles permissions/cancellation. Sending starts A; saved sessions wait for resume. ScenarioScreen and its route have been removed.
 
 src/domain/abSession.ts defines scenario/persona snapshots, stable turn IDs and lifecycle:
 
@@ -49,7 +49,7 @@ Local data can be removed by uninstall/storage clearing. AsyncStorage keys are n
 
 ## UI and compatibility
 
-MotionProvider tracks reduced motion, pointer capabilities and app state. Native animations cancel/retarget; web interactions use short transform/opacity easing. Drawers contain focus and restore it on close. Loops stop on pause/background/unmount. Scroll areas are bounded, composers cap growth and selected controls expose accessibility state. English transcript bubbles retain original audio replay.
+MotionProvider tracks reduced motion, pointer capabilities and app state. Native animations cancel/retarget; web interactions use short transform/opacity easing. Drawers contain focus and restore it on close. Loops stop on pause/background/unmount. Scroll areas are bounded, composers cap growth and selected controls expose accessibility state. English transcript bubbles retain original audio replay. conversationStyles.ts shares the original InterviewScreen design with ABSessionScreen: gradient topic bubble, glass audio cards, custom gradient microphone, circular controls and atmospheric footer fade. Scrollbars stay hidden while automatic scrolling remains. Generated scenario titles/objectives/time metadata are not chat headings.
 
 InterviewScreen/SummaryScreen preserve the prior five-round interview behavior for legacy routes, with capture/retry fixes. ElevenLabs is a legacy alternative. They do not manufacture A/B data. Navigation uses @react-navigation/stack with aligned StackScreenProps.
 

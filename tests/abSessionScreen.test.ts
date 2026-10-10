@@ -15,6 +15,7 @@ const mockTTS = jest.fn();
 const mockTranscribe = jest.fn();
 const mockPlayback = jest.fn();
 const mockStopPlayback = jest.fn(async () => {});
+const mockMute = jest.fn(async (_muted: boolean) => {});
 const mockStartRecording = jest.fn(async (_silence: () => void, _idle: () => void) => {});
 const mockStopRecording = jest.fn(async () => 'file:///cache/reply.m4a');
 const mockPauseRecording = jest.fn(async () => {});
@@ -31,8 +32,8 @@ jest.mock('react-native', () => {
     return React.createElement('ScrollView', props, props.children);
   });
   return { View: 'View', Text: 'Text', TextInput: 'TextInput', ScrollView,
-    KeyboardAvoidingView: 'KeyboardAvoidingView', ActivityIndicator: 'ActivityIndicator',
-    StyleSheet: { create: (value: any) => value }, Platform: { OS: 'ios' }, Share: { share: jest.fn() },
+    KeyboardAvoidingView: 'KeyboardAvoidingView', ActivityIndicator: 'ActivityIndicator', Modal: 'Modal',
+    StyleSheet: { create: (value: any) => value }, Platform: { OS: 'ios' }, Share: { share: jest.fn() }, useWindowDimensions: () => ({width:390,height:844}),
     AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
       mockAppStateListener = listener; return { remove: mockRemoveAppStateListener };
     } } };
@@ -40,15 +41,18 @@ jest.mock('react-native', () => {
 jest.mock('../src/components/CoachieDesign', () => {
   const React = require('react');
   const component = (name: string) => (props: any) => React.createElement(name, props, props.children);
-  return { DesignFrame: component('DesignFrame'), GlassButton: component('Action'), Waveform: component('Waveform'),
+  return { DesignFrame: component('DesignFrame'), GlassButton: component('Action'), GlowButton: component('Action'), Waveform: component('Waveform'),
+    DesignIcon: component('Icon'), Orb: component('Orb'), HeroOrb: component('HeroOrb'), ProgressiveSpokenText: component('SpokenText'), TranscriptionIcon: component('TranscriptIcon'), VoiceSettingsIcon: component('VoiceIcon'),
     DESIGN: { font: 'Inter', medium: 'Inter', semibold: 'Inter' } };
 });
 jest.mock('../src/components/Motion', () => {
   const React = require('react');
   const component = (name: string) => (props: any) => React.createElement(name, props, props.children);
   return { FadeIn: component('FadeIn'), MotionPressable: component('MotionAction'),
-    LiveDots: component('LiveDots'), BreathingHalo: component('Halo'), useMotion: () => ({ reduced: true }) };
+    LiveDots: component('LiveDots'), Reveal: component('Reveal'), useMotion: () => ({ reduced: true }) };
 });
+jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'Gradient' }));
+jest.mock('expo-blur', () => ({ BlurView: 'BlurView' }));
 jest.mock('../src/store/settingsStore', () => ({ loadSettings: async () => ({ geminiApiKey: 'fixture-key', geminiVoice: 'Kore', ttsProvider: 'gemini' }) }));
 jest.mock('../src/store/abSessionStore', () => ({ saveABSession: (...args: any[]) => (mockSave as any)(...args), loadABSession: (...args: any[]) => (mockLoad as any)(...args), deleteABSession: jest.fn(async () => {}) }));
 jest.mock('../src/store/audioAssetStore', () => ({
@@ -62,6 +66,7 @@ jest.mock('../src/services/abConversationService', () => ({
 jest.mock('../src/services/geminiService', () => ({ generateGeminiTTS: (...args: any[]) => mockTTS(...args), transcribeAudio: (...args: any[]) => mockTranscribe(...args) }));
 jest.mock('../src/services/audioService', () => ({
   playBase64Audio: (...args: any[]) => mockPlayback(...args), stopPlayback: (...args: any[]) => (mockStopPlayback as any)(...args),
+  setPlaybackMuted: (muted: boolean) => mockMute(muted),
   startRecording: (...args: any[]) => (mockStartRecording as any)(...args), stopRecording: (...args: any[]) => (mockStopRecording as any)(...args),
   pauseRecording: (...args: any[]) => (mockPauseRecording as any)(...args), resumeRecording: (...args: any[]) => (mockResumeRecording as any)(...args),
   requestMicrophonePermission: (...args: any[]) => (mockPermission as any)(...args),
@@ -115,8 +120,12 @@ describe('Real A/B screen integration with controlled device and provider bounda
   const control = (label: string) => renderer!.root.findAll(node =>
     (String(node.type) === 'Action' || String(node.type) === 'MotionAction') && (node.props.label === label || node.props.accessibilityLabel === label))[0];
   const press = async (label: string) => {
+    if (label === 'Automatic microphone capture after Coachie speaks') {
+      await press('Voice & language settings');
+    }
     const node = control(label); expect(node).toBeDefined();
     await act(async () => { node.props.onPress(); await flush(); });
+    if (label === 'Automatic microphone capture after Coachie speaks') await press('Close settings');
   };
   const visibleText = () => renderer!.root.findAll(node => String(node.type) === 'Text').map(node => node.children.filter(child => typeof child === 'string').join('')).join('\n');
   const startWithoutAutoListen = async () => {
@@ -133,6 +142,27 @@ describe('Real A/B screen integration with controlled device and provider bounda
     await press('Start Model A');
     expect(mockDecide).toHaveBeenCalledTimes(1); expect(mockTTS).toHaveBeenCalledTimes(1);
     expect(mockSaved!.turns).toHaveLength(1); expect(mockSaved!.turns[0]).toMatchObject({ run: 'A', speaker: 'tasker', delivered: true });
+  });
+
+  it('starts a Home topic directly in the original chat without a scenario form or extra heading', async () => {
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(ABSessionScreen, { navigation, route: { params: { topic: 'Who is Cristiano Ronaldo?' } } } as any));
+      await flush();
+    });
+    expect(mockDecide).toHaveBeenCalledTimes(1);
+    expect(mockTTS).toHaveBeenCalledTimes(1);
+    expect(mockSaved!.turns).toHaveLength(1);
+    expect(visibleText()).toContain('Who is Cristiano Ronaldo?');
+    expect(visibleText()).toContain('Model A');
+    expect(visibleText()).not.toMatch(/Set up your scenario|What you want to achieve|English speech|Suggested:/);
+    expect(renderer!.root.findByType('ScrollView' as any).props.showsVerticalScrollIndicator).toBe(false);
+    expect(control('Voice & language settings')).toBeDefined();
+  });
+
+  it('starts each chat unmuted and makes the restored speaker button control playback', async () => {
+    await mount(); expect(mockMute).toHaveBeenLastCalledWith(false);
+    await press('Mute voice'); expect(mockMute).toHaveBeenLastCalledWith(true);
+    await press('Unmute voice'); expect(mockMute).toHaveBeenLastCalledWith(false);
   });
 
   it('retries an undelivered question after TTS failure without generating a second question', async () => {

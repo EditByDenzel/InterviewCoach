@@ -1,18 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, ActivityIndicator, Share, KeyboardAvoidingView, Platform, AppState } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet, ActivityIndicator, Share, KeyboardAvoidingView, Platform, AppState, Modal, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, AppSettings } from '../types';
 import { ABSession, ABTurn, ABVote, createABSession, startA, startB, appendTurn, addElapsed, endRun, completeComparison, setVote, contextForRun, cacheKey, completionForRun } from '../domain/abSession';
 import { personaProfiles } from '../domain/personas';
+import { prepareConversation, scenarioFromTopic } from '../services/conversationSetup';
 import { loadSettings } from '../store/settingsStore';
 import { saveABSession, loadABSession, deleteABSession } from '../store/abSessionStore';
 import { saveAudioAsset, loadAudioAsset, deleteAudioAssets } from '../store/audioAssetStore';
 import { decideNextTurn, translateToEnglish, compareRuns } from '../services/abConversationService';
 import { generateGeminiTTS, transcribeAudio } from '../services/geminiService';
 import { createRecordingSession } from '../services/recordingSession';
-import { playBase64Audio, stopPlayback, startRecording, stopRecording, pauseRecording, resumeRecording, requestMicrophonePermission, readAudioAsBase64, releaseTemporaryRecording, subscribeAudioLevel, AudioExtension } from '../services/audioService';
-import { DesignFrame, DESIGN, GlassButton, Waveform } from '../components/CoachieDesign';
-import { FadeIn, LiveDots, MotionPressable, useMotion, BreathingHalo } from '../components/Motion';
+import { playBase64Audio, stopPlayback, setPlaybackMuted, startRecording, stopRecording, pauseRecording, resumeRecording, requestMicrophonePermission, readAudioAsBase64, releaseTemporaryRecording, subscribeAudioLevel, AudioExtension } from '../services/audioService';
+import { DesignFrame, DESIGN, GlassButton, Waveform, DesignIcon, GlowButton, Orb, HeroOrb, ProgressiveSpokenText, TranscriptionIcon, VoiceSettingsIcon } from '../components/CoachieDesign';
+import { conversationStyles as chat } from '../components/conversationStyles';
+import { FadeIn, LiveDots, MotionPressable, useMotion, Reveal } from '../components/Motion';
 
 type Props = StackScreenProps<RootStackParamList, 'ABSession'>;
 type Phase = 'ready' | 'thinking' | 'speaking' | 'listening' | 'paused' | 'transcribing' | 'ending' | 'waiting' | 'comparing' | 'complete' | 'error';
@@ -22,13 +26,21 @@ const audioExtension = (mime: string): AudioExtension => ({ 'audio/mpeg': 'mp3',
 const id = (session: ABSession, speaker: 'tasker' | 'model') => `${session.id}-${session.activeRun}-${speaker}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 export default function ABSessionScreen({ navigation, route }: Props) {
-  const [session, setSession] = useState(() => createABSession(route.params.scenario, personaProfiles(route.params.scenario.language)[0]));
+  const narrow = useWindowDimensions().width < 360;
+  const [session, setSession] = useState(() => {
+    const scenario = route.params.scenario || scenarioFromTopic(route.params.topic || '');
+    return createABSession(scenario, personaProfiles(scenario.language)[0]);
+  });
   const [phase, setPhase] = useState<Phase>('ready');
   const [loaded, setLoaded] = useState(false), [error, setError] = useState(''), [saveWarning, setSaveWarning] = useState('');
   const [draft, setDraft] = useState(''), [recording, setRecording] = useState(false), [paused, setPaused] = useState(false), [seconds, setSeconds] = useState(0);
   const [playingId, setPlayingId] = useState<string | null>(null), [progress, setProgress] = useState(0), [level, setLevel] = useState(0);
   const [confirmClose, setConfirmClose] = useState(false), [confirmDelete, setConfirmDelete] = useState(false);
   const [autoListen, setAutoListen] = useState(true);
+  const [viewMode, setViewMode] = useState<'chat' | 'voice'>('chat');
+  const [muted, setMuted] = useState(false), [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const setupAbort = useRef(new AbortController());
   const state = useRef(session), alive = useRef(true), exiting = useRef(false), busy = useRef(false), pausedRef = useRef(false), phaseRef = useRef<Phase>('ready');
   const automatic = useRef(true), settings = useRef<AppSettings | null>(null), finishRequested = useRef(false), retry = useRef<(() => Promise<void>) | null>(null);
   const log = useRef<ScrollView>(null), clipCache = useRef(new Map<string, string>()), lastTick = useRef(Date.now());
@@ -36,6 +48,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const temporaryReply = useRef<{ id: string; uri: string; run: 'A' | 'B' } | null>(null);
   const retainingReply = useRef<Promise<void> | null>(null);
   const { reduced } = useMotion();
+  useEffect(() => { void setPlaybackMuted(muted); }, [muted]);
 
   const showPhase = (value: Phase) => { phaseRef.current = value; if (alive.current) setPhase(value); };
   const update = (value: ABSession) => { state.current = value; if (alive.current) setSession(value); };
@@ -244,6 +257,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const close = async () => {
     exiting.current = true;
+    setupAbort.current.abort();
     try {
       if (capture.current!.getSnapshot().recording) {
         const uri = await stopRecording();
@@ -269,9 +283,19 @@ export default function ABSessionScreen({ navigation, route }: Props) {
         ensureActive();
         if (route.params.id && !saved) throw new Error('This A/B session is no longer available.');
         if (saved) { update(saved); showPhase(saved.status === 'completed' ? 'complete' : saved.status === 'waiting_b' ? 'waiting' : 'ready'); }
-        else { const profiles = personaProfiles(route.params.scenario.language); update(createABSession(route.params.scenario, { voice: settings.current.geminiVoice || profiles[0].voice, style: profiles[0].style })); }
+        else {
+          showPhase('thinking');
+          const scenario = route.params.scenario || await prepareConversation({ text: route.params.topic, image: route.params.image }, settings.current, setupAbort.current.signal);
+          ensureActive();
+          const profiles = personaProfiles(scenario.language);
+          update(createABSession(scenario, { voice: settings.current.geminiVoice || profiles[0].voice, style: profiles[0].style }));
+          showPhase('ready');
+        }
         setLoaded(true);
         retry.current = null;
+        // Sending a topic is the start action, as in the original chat. Reopened
+        // sessions wait for explicit resume; no camera/provider work repeats.
+        if (!saved && !route.params.scenario) await operate(begin);
       } catch (err) { if (active()) { setError((err as Error).message); retry.current = initialize; } }
     };
     void initialize();
@@ -283,7 +307,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       else { void stopPlayback(); showPhase('paused'); }
     });
     const back = navigation.addListener('beforeRemove', e => { if (!exiting.current) { e.preventDefault(); setConfirmClose(true); } });
-    return () => { alive.current = false; unsubscribe(); appState?.remove(); back(); void capture.current!.dispose(); void stopPlayback(); };
+    return () => { alive.current = false; setupAbort.current.abort(); unsubscribe(); appState?.remove(); back(); void capture.current!.dispose(); void stopPlayback(); };
   }, []);
   useEffect(() => {
     const timer = setInterval(() => {
@@ -299,40 +323,120 @@ export default function ABSessionScreen({ navigation, route }: Props) {
 
   const ongoing = ['active_a', 'active_b'].includes(session.status);
   const canStart = loaded && !ongoing && session.status !== 'completed';
-  const total = session.turns.filter(t => t.run === session.activeRun && t.speaker === 'model').length;
-  const maxReached = session.elapsed[session.activeRun] >= session.scenario.maxMinutes * 60;
-  const profileChoices = personaProfiles(session.scenario.language);
-  const renderTurn = (turn: ABTurn, index: number) => <FadeIn key={turn.id} style={[styles.bubble, turn.speaker === 'model' && styles.modelBubble]}>
-    <Text style={styles.meta}>{turn.speaker === 'tasker' ? 'Coachie · Synthetic voice' : `Model ${turn.run}`} · {index + 1}</Text>
-    <Text selectable style={styles.body}>{turn.englishText}</Text>
-    {turn.audioAssetId && <View style={styles.audioRow}><MotionPressable accessibilityRole="button" accessibilityLabel={`${playingId === turn.id ? 'Stop' : 'Play'} ${turn.speaker === 'tasker' ? 'Coachie' : `Model ${turn.run}`} turn ${index + 1}`} onPress={() => void replay(turn)} style={styles.play}><Text style={styles.buttonText}>{playingId === turn.id ? '■' : '▶'}</Text></MotionPressable><View style={{ flex: 1 }}><Waveform active={playingId === turn.id} progress={playingId === turn.id ? progress : 0} candidate={turn.speaker === 'model'} /></View><Text style={styles.meta}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text></View>}
-    {turn.speaker === 'tasker' && turn.delivered === false && <Text style={styles.meta}>Not yet fully delivered · resume to replay</Text>}
-  </FadeIn>;
-
-  return <DesignFrame chat><KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <View style={styles.header}><GlassButton label="Close A/B chat" onPress={() => setConfirmClose(true)} style={styles.smallButton}><Text style={styles.buttonText}>Close</Text></GlassButton><Text style={styles.headerText}>Model {session.activeRun} · {time(session.elapsed[session.activeRun])}</Text><GlassButton label="Delete A/B session" onPress={() => setConfirmDelete(true)} style={styles.smallButton}><Text style={styles.buttonText}>Delete</Text></GlassButton></View>
-    <ScrollView ref={log} style={styles.fill} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>{session.scenario.title}</Text><Text style={styles.meta}>{session.scenario.language} speech · English transcript · {session.scenario.minMinutes}–{session.scenario.maxMinutes} min per model{session.scenario.minTurns ? ` · ${session.scenario.minTurns}+ exchanges` : ''}</Text>
-      <Text style={styles.body}>{session.scenario.objective}</Text>
-      {session.status === 'ready_a' && <View style={styles.card}><Text style={styles.cardTitle}>Choose a character</Text><Text style={styles.meta}>Keep the same character for both models. Audition these directions before judging accent quality.</Text>{profileChoices.map(p => <GlassButton key={p.id} label={`Select ${p.label}`} accessibilityState={{ selected: session.persona.style === p.style }} onPress={() => update({ ...state.current, persona: { voice: p.voice, style: p.style } })} style={[styles.choice, session.persona.style === p.style && styles.selected]}><Text style={styles.buttonText}>{p.label} · {p.voice}</Text></GlassButton>)}<GlassButton label="Preview character voice" onPress={() => void operate(async () => { const script = session.scenario.language === 'Thai' ? 'ช่วยอธิบายเรื่องนี้ให้ฉันเข้าใจหน่อยได้ไหม' : 'Could you explain a little more about what you mean?'; const audio = await generateGeminiTTS(apiKey(), script, state.current.persona.voice, state.current.persona.style); ensureActive(); await playBase64Audio(audio); })} style={styles.choice}><Text style={styles.buttonText}>Preview voice</Text></GlassButton></View>}
-      <View style={styles.divider}><View style={styles.line}/><Text style={styles.cardTitle}>Model A</Text><View style={styles.line}/></View>
-      {session.turns.filter(t => t.run === 'A').map(renderTurn)}
-      {session.status !== 'ready_a' && session.status !== 'active_a' && <View style={styles.divider}><View style={styles.line}/><Text style={styles.cardTitle}>Model B</Text><View style={styles.line}/></View>}
-      {session.status === 'waiting_b' && <View style={styles.card}><Text style={styles.body}>Model A is saved. Switch the evaluated model on your computer, then start B. Its history begins fresh with the same opener.</Text></View>}
-      {session.turns.filter(t => t.run === 'B').map(renderTurn)}
-      {session.pendingReply && <View style={styles.card}><Text style={styles.body}>Recorded reply retained. Its English transcript is waiting for completion.</Text><GlassButton label="Retry English transcript" onPress={() => void operate(finalizePending)} style={styles.choice}><Text style={styles.buttonText}>Retry transcript</Text></GlassButton><GlassButton label="Replay retained reply" onPress={() => void operate(async () => { const a = await loadAudioAsset(state.current.pendingReply!.audioAssetId); if (!a) throw new Error('Recorded audio unavailable.'); ensureActive(); await playBase64Audio(a.base64, audioExtension(a.mimeType)); })} style={styles.choice}><Text style={styles.buttonText}>Replay reply</Text></GlassButton>{!temporaryReply.current && <GlassButton label="Delete unfinished recording and retry capture" onPress={() => void operate(deletePendingRecording)} style={styles.choice}><Text style={styles.buttonText}>Delete this recording & try again</Text></GlassButton>}</View>}
+  const topic = route.params.topic || session.scenario.topic || session.scenario.sourceText || session.scenario.title;
+  const currentTurn = session.turns.filter(t => t.run === session.activeRun && t.speaker === 'tasker').at(-1);
+  const canRecord = loaded && ongoing && !session.pendingReply && !temporaryReply.current && (recording || (!busy.current && !error));
+  const record = () => {
+    if (!canRecord) return;
+    if (capture.current!.getSnapshot().recording) void capture.current!.end();
+    else void capture.current!.start();
+  };
+  const submitTyped = () => {
+    if (!draft.trim() || busy.current || session.pendingReply) return;
+    const text = draft.trim();
+    void operate(async () => {
+      const english = await translateToEnglish(apiKey(), text, state.current.scenario.language);
+      await acceptReply(text, english, id(state.current, 'model'));
+    });
+  };
+  const stamp = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const pauseGlyph = <View style={chat.pauseBars}><View style={chat.pauseBar}/><View style={chat.pauseBar}/></View>;
+  const smallPauseGlyph = <View style={chat.miniPauseBars}><View style={chat.miniPauseBar}/><View style={chat.miniPauseBar}/></View>;
+  const renderTurn = (turn: ABTurn, index: number) => {
+    const playing = playingId === turn.id;
+    if (turn.speaker === 'tasker') return <FadeIn key={turn.id} style={chat.aiMessageGroup}>
+      <View style={chat.draftingRow}><Orb size={28}/><View style={chat.draftingPill}><Text style={chat.draftingText}>Aira · Synthetic Voice</Text></View></View>
+      <View style={chat.aiBubbleWrapper}><View style={chat.aiBubbleContainer}>
+        <View style={chat.aiQuestionContent}><Text selectable style={chat.messageText}>{turn.englishText}</Text></View>
+        <View style={chat.attachedAudioBar}>
+          <MotionPressable accessibilityRole="button" accessibilityLabel={`${playing ? 'Stop' : 'Play'} Coachie turn ${index + 1}`} disabled={!turn.audioAssetId} onPress={() => void replay(turn)} style={chat.aiPlayButton}>
+            <LinearGradient colors={['#D97706', '#FB923C']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
+            {playing ? smallPauseGlyph : <DesignIcon name="play"/>}
+          </MotionPressable>
+          <View style={chat.aiWaveformArea}><Waveform active={playing} progress={playing ? progress : 0}/></View>
+          {turn.audioAssetId ? <Text style={chat.aiDurationText}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text> : <ActivityIndicator size="small" color="#FF8C38"/>}
+        </View>
+      </View><Text style={chat.aiMetaCaption}>{stamp(turn.createdAt)} • Synthetic Voice (Aira)</Text></View>
+    </FadeIn>;
+    return <FadeIn key={turn.id} style={chat.candidateCardWrapper}><View style={chat.candidateCard}>
+      {turn.audioAssetId && <View style={chat.candidateAudioRow}>
+        <MotionPressable accessibilityRole="button" accessibilityLabel={`${playing ? 'Stop' : 'Play'} Model ${turn.run} turn ${index + 1}`} onPress={() => void replay(turn)} style={chat.candidatePlayButton}>{playing ? smallPauseGlyph : <DesignIcon name="play"/>}</MotionPressable>
+        <View style={chat.candidateWaveArea}><Waveform candidate active={playing} progress={playing ? progress : 0}/><Text style={chat.candidateSizeCaption}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text></View>
+        <MotionPressable accessibilityRole="button" accessibilityLabel={collapsed[turn.id] ? 'Expand transcript' : 'Collapse transcript'} onPress={() => setCollapsed(c => ({...c,[turn.id]:!c[turn.id]}))} style={chat.collapseButton}><TranscriptionIcon open={!collapsed[turn.id]}/></MotionPressable>
+      </View>}
+      <Reveal open={!collapsed[turn.id]}><View style={chat.candidateTranscript}><Text selectable style={chat.candidateText}>{turn.englishText}</Text><View style={chat.candidateMetaRow}><Text style={chat.candidateTimestamp}>{stamp(turn.createdAt)}</Text><DesignIcon name="check"/></View></View></Reveal>
+    </View></FadeIn>;
+  };
+  const controls = <View style={chat.actionControlsRow}>
+    <GlassButton label={paused ? 'Resume conversation' : 'Pause conversation'} onPress={() => void togglePause()} disabled={!ongoing} style={chat.sideCircleButton}>{paused ? <DesignIcon name="play"/> : pauseGlyph}</GlassButton>
+    <GlowButton label={recording ? 'Finish model reply' : 'Start microphone capture'} onPress={record} disabled={!canRecord} recording={recording} paused={paused} level={recording && !paused ? level : 0}/>
+    <GlassButton label="Voice & language settings" onPress={() => setQuickSettingsOpen(true)} style={chat.sideCircleButton}><VoiceSettingsIcon size={18} color="#FFF"/></GlassButton>
+  </View>;
+  const recovery = !!(error || saveWarning);
+  const footerContent = <>
+    <View style={chat.statusSubheaderRow}><Text accessibilityLiveRegion="polite" style={chat.statusSubheaderText}>{recovery ? 'Something went wrong' : paused ? 'Paused' : labels[phase]}{recording ? ` · ${time(seconds)}` : ''}</Text>{!recovery && ['thinking','transcribing','comparing'].includes(phase) && <LiveDots active/>}</View>
+    {recovery ? <View style={chat.errorContainer}>
+      <Text accessibilityLiveRegion="assertive" style={chat.errorText}>{error || saveWarning}</Text>
+      <MotionPressable accessibilityRole="button" accessibilityLabel="Retry failed action" onPress={() => void operate(retry.current || begin)}><Text style={chat.retryText}>Try again</Text></MotionPressable>
+      {!!saveWarning && <MotionPressable accessibilityRole="button" accessibilityLabel="Retry saving session" onPress={() => void operate(retry.current || persist)}><Text style={chat.retryText}>Retry saving</Text></MotionPressable>}
+      {session.pendingReply && <View style={styles.voteRow}>
+        <MotionPressable accessibilityRole="button" accessibilityLabel="Retry English transcript" onPress={() => void operate(finalizePending)}><Text style={chat.retryText}>Retry transcript</Text></MotionPressable>
+        <MotionPressable accessibilityRole="button" accessibilityLabel="Replay retained reply" onPress={() => void operate(async () => {const audio=await loadAudioAsset(state.current.pendingReply!.audioAssetId);if(!audio)throw new Error('Recorded audio unavailable.');ensureActive();await playBase64Audio(audio.base64,audioExtension(audio.mimeType));})}><Text style={chat.retryText}>Replay</Text></MotionPressable>
+        {!temporaryReply.current && <MotionPressable accessibilityRole="button" accessibilityLabel="Delete unfinished recording and retry capture" onPress={() => void operate(deletePendingRecording)}><Text style={chat.retryText}>Delete recording & retry</Text></MotionPressable>}
+      </View>}
+    </View> : canStart ? <GlassButton label={session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start Model A'} onPress={() => void operate(begin)} style={chat.closePill}><Text style={chat.closeLabel}>{session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start conversation'}</Text></GlassButton>
+    : ongoing && phase === 'ready' ? <GlassButton label="Resume saved run" onPress={() => void operate(begin)} style={chat.closePill}><Text style={chat.closeLabel}>Resume conversation</Text></GlassButton>
+    : ongoing && !recording && !['thinking','speaking','transcribing','comparing','ending'].includes(phase) ? <View style={chat.spokenInputRow}>
+      <TextInput accessibilityLabel="Type model reply in selected speaking language" value={draft} onChangeText={setDraft} onSubmitEditing={submitTyped} returnKeyType="send" placeholder="Type a reply or tap mic to speak." placeholderTextColor="#A1A1AA" style={chat.spokenQueryInput}/>
+      {!!draft.trim() && <MotionPressable accessibilityRole="button" accessibilityLabel="Submit typed model reply" onPress={submitTyped} style={chat.inlineSendAction}><DesignIcon name="send"/></MotionPressable>}
+    </View> : ongoing ? <Text numberOfLines={2} style={chat.spokenFooterCaption}>{paused ? 'Tap resume to continue speaking.' : phase === 'speaking' ? 'Listen to the question above.' : recording ? 'Aira is listening to the model…' : 'Preparing next response…'}</Text> : null}
+    {ongoing && controls}
+  </>;
+  return <DesignFrame chat>
+    <View style={[chat.topHeader, narrow && {paddingHorizontal:8}]}>
+      <GlassButton label="Close A/B chat" onPress={() => setConfirmClose(true)} style={[chat.closePill,narrow && {paddingHorizontal:8}]}><DesignIcon name="close"/><Text style={chat.closeLabel}>Close chat</Text></GlassButton>
+      <View style={[chat.headerRightControls,narrow && {gap:4}]}>
+        <GlassButton label={viewMode === 'voice' ? 'Switch to chat view' : 'Switch to voice screen'} onPress={() => setViewMode(viewMode === 'voice' ? 'chat' : 'voice')} style={[chat.modeTogglePill,narrow && {paddingHorizontal:6}]}><Text style={chat.modeToggleText}>{viewMode === 'voice' ? 'Chat View' : 'Voice Mode'}</Text></GlassButton>
+        <GlassButton label="End current model run" onPress={() => void finish()} disabled={!ongoing || phase === 'ending' || !session.turns.some(t => t.run === session.activeRun && t.speaker === 'tasker' && t.delivered)} style={chat.roundTrackerPill}><View style={chat.roundDot}/><Text style={chat.roundLabel}>Model {session.activeRun}</Text></GlassButton>
+        <GlassButton label={muted ? 'Unmute voice' : 'Mute voice'} onPress={() => setMuted(value => !value)} style={[chat.speakerButton, muted && {opacity:.45}]}><DesignIcon name="speaker"/></GlassButton>
+      </View>
+    </View>
+    {viewMode === 'voice' ? <View style={chat.voiceScreenContainer}>
+      <View style={chat.voiceCenterHero}><HeroOrb size={180}/><Text style={chat.voiceListeningStatus}>{paused ? 'Paused' : labels[phase]}</Text><ProgressiveSpokenText text={currentTurn?.englishText || ''} progress={progress} active={phase === 'speaking'} style={chat.voiceSpokenHeading}/></View>
+      <View style={chat.voiceFooterControls}>{footerContent}</View>
+    </View> : <KeyboardAvoidingView style={chat.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><View style={chat.chatContainer}>
+      <ScrollView ref={log} style={chat.chatScrollView} showsVerticalScrollIndicator={false} contentContainerStyle={chat.chatScrollContent} keyboardShouldPersistTaps="handled" onContentSizeChange={() => log.current?.scrollToEnd({animated:!reduced})}>
+        <View style={chat.topicRow}><LinearGradient colors={['#FF6F26','#FF500B','#DE3400']} style={chat.topicBubble}><Text style={chat.topicText}>{topic}</Text></LinearGradient><Text style={chat.topicTimestamp}>{stamp(session.createdAt)}</Text></View>
+        <View style={styles.divider}><View style={styles.line}/><Text style={styles.meta}>Model A</Text><View style={styles.line}/></View>
+        {session.turns.filter(t => t.run === 'A').map(renderTurn)}
+        {!loaded || (phase === 'thinking' && !currentTurn) ? <View style={chat.draftingRow}><Orb size={28}/><View style={chat.draftingPill}><Text style={chat.draftingText}>Aira is drafting the question...</Text><LiveDots active/></View></View> : null}
+        {!['ready_a','active_a'].includes(session.status) && <View style={styles.divider}><View style={styles.line}/><Text style={styles.meta}>Model B</Text><View style={styles.line}/></View>}
+        {session.turns.filter(t => t.run === 'B').map(renderTurn)}
+        {phase === 'transcribing' && <View style={chat.candidateCardWrapper}><View style={chat.candidateCard}><View style={chat.candidateAudioRow}><View style={chat.candidateWaveArea}><Waveform candidate active/><Text style={chat.candidateSizeCaption}>Transcribing…</Text></View></View></View></View>}
       {session.comparison && <View style={styles.card}><Text style={styles.title}>Suggested: {session.comparison.recommendation.replace('_', ' ')}</Text><Text style={styles.body}>{session.comparison.summary}</Text><Text style={styles.body}>A: {session.comparison.outcomes.A}{'\n'}B: {session.comparison.outcomes.B}</Text>{session.comparison.findings.map((f, i) => <View key={i} style={styles.finding}><Text style={styles.cardTitle}>{f.dimension}</Text><Text style={styles.body}>{f.detail}</Text><Text style={styles.meta}>Evidence: {f.turnIds.map(turnId => { const t = session.turns.find(t => t.id === turnId); return t ? `Model ${t.run} · turn ${session.turns.filter(t2 => t2.run === t.run).findIndex(t2 => t2.id === turnId) + 1}` : ''; }).join(', ')}</Text></View>)}{session.comparison.limitations.map((l, i) => <Text key={i} style={styles.meta}>{l}</Text>)}<Text style={styles.cardTitle}>Your final choice</Text><View style={styles.voteRow}>{(['A', 'B', 'tie', 'insufficient_evidence'] as ABVote[]).map(v => <GlassButton key={v} label={`Choose ${v}`} accessibilityState={{ selected: session.vote === v }} onPress={() => void operate(async () => { update(setVote(state.current, v)); await persist(); })} style={[styles.vote, session.vote === v && styles.selected]}><Text style={styles.buttonText}>{v === 'insufficient_evidence' ? 'Unsure' : v}</Text></GlassButton>)}</View><GlassButton label="Share comparison and English transcript" onPress={() => void Share.share({ message: `${session.scenario.title}\n\n${session.turns.map(t => `${t.run} ${t.speaker}: ${t.englishText}`).join('\n\n')}\n\n${session.comparison!.summary}\nUser vote: ${session.vote || 'not selected'}` })} style={styles.choice}><Text style={styles.buttonText}>Share transcript</Text></GlassButton></View>}
-      {!!error && <View style={styles.card}><Text accessibilityLiveRegion="assertive" style={styles.error}>{error}</Text>{(loaded || retry.current) && <GlassButton label="Retry failed action" onPress={() => void operate(retry.current || begin)} style={styles.choice}><Text style={styles.buttonText}>Retry</Text></GlassButton>}</View>}
-      {!!saveWarning && <View style={styles.card}><Text style={styles.error}>{saveWarning}</Text><GlassButton label="Retry saving session" onPress={() => void operate(retry.current || persist)} style={styles.choice}><Text style={styles.buttonText}>Retry saving</Text></GlassButton></View>}
-      {confirmClose && <View style={styles.card}><Text style={styles.cardTitle}>Save and close?</Text><Text style={styles.body}>Turns and recordings stay until you delete this chat. Any active recording is saved for transcription when you return.</Text><View style={styles.voteRow}><GlassButton label="Keep chatting" onPress={() => setConfirmClose(false)} style={styles.vote}><Text style={styles.buttonText}>Stay</Text></GlassButton><GlassButton label="Save and close chat" onPress={() => void close()} style={styles.vote}><Text style={styles.buttonText}>Save & close</Text></GlassButton></View></View>}
-      {confirmDelete && <View style={styles.card}><Text style={styles.cardTitle}>Delete chat and recordings?</Text><View style={styles.voteRow}><GlassButton label="Cancel deletion" onPress={() => setConfirmDelete(false)} style={styles.vote}><Text style={styles.buttonText}>Cancel</Text></GlassButton><GlassButton label="Confirm delete recordings and transcripts" onPress={() => void operate(async () => { await capture.current!.dispose(); await stopPlayback(); await deleteABSession(session.id); exiting.current = true; navigation.popToTop(); })} style={styles.vote}><Text style={styles.buttonText}>Delete</Text></GlassButton></View></View>}
-    </ScrollView>
-    {!confirmClose && !confirmDelete && <View style={styles.footer}><View style={styles.statusRow}><Text accessibilityLiveRegion="polite" style={styles.meta}>{labels[phase]}</Text>{['thinking', 'transcribing', 'comparing'].includes(phase) && <LiveDots active/>}</View>
-      {!loaded && !error && <ActivityIndicator color="#FF8C38"/>}
-      {canStart && <GlassButton style={styles.choice} label={session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start Model A'} onPress={() => void operate(begin)}><Text style={styles.buttonText}>{session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start Model A'}</Text></GlassButton>}
-      {ongoing && <><Text style={styles.meta}>{total} replies · {maxReached ? 'Time reached. Finish this reply; no further questions.' : 'Transcription appears after you finish each reply.'}</Text>{phase === 'ready' && <GlassButton style={styles.choice} label="Resume saved run" onPress={() => void operate(begin)}><Text style={styles.buttonText}>Resume run</Text></GlassButton>}<View style={styles.controls}><GlassButton label={paused ? 'Resume conversation' : 'Pause conversation'} onPress={() => void togglePause()} style={styles.vote}><Text style={styles.buttonText}>{paused ? 'Resume' : 'Pause'}</Text></GlassButton><BreathingHalo size={88} active={recording && !paused} recording={recording} level={level}><GlassButton label={recording ? 'Finish model reply' : 'Start microphone capture'} onPress={() => { if (busy.current || state.current.pendingReply || temporaryReply.current) return; if (capture.current!.getSnapshot().recording) void capture.current!.end(); else void capture.current!.start(); }} style={styles.mic}><Text style={styles.buttonText}>{recording ? time(seconds) + ' · Stop' : 'Listen'}</Text></GlassButton></BreathingHalo><GlassButton label="End current model run" disabled={phase === 'ending' || (session.activeRun === 'A' && !session.turns.some(t => t.run === 'A' && t.speaker === 'tasker' && t.delivered))} onPress={() => void finish()} style={styles.vote}><Text style={styles.buttonText}>End {session.activeRun}</Text></GlassButton></View><MotionPressable accessibilityRole="switch" accessibilityState={{ checked: autoListen }} accessibilityLabel="Automatic microphone capture after Coachie speaks" onPress={() => { automatic.current = !automatic.current; setAutoListen(automatic.current); }} style={styles.switch}><Text style={styles.meta}>Auto listen {autoListen ? 'on' : 'off'}</Text></MotionPressable>{!recording && !['thinking', 'speaking', 'transcribing', 'comparing'].includes(phase) && !session.pendingReply && !temporaryReply.current && <View style={styles.inputRow}><TextInput accessibilityLabel="Type model reply in selected speaking language" placeholder="Or type the model’s reply" placeholderTextColor="#C9A997" value={draft} onChangeText={setDraft} multiline style={styles.input}/><GlassButton label="Submit typed model reply" onPress={() => { if (!draft.trim()) return; const text = draft.trim(); void operate(async () => { const english = await translateToEnglish(apiKey(), text, state.current.scenario.language); await acceptReply(text, english, id(state.current, 'model')); }); }} style={styles.smallButton}><Text style={styles.buttonText}>Send</Text></GlassButton></View>}</>}
-    </View>}
-  </KeyboardAvoidingView></DesignFrame>;
+      </ScrollView>
+      <View style={chat.anchoredSpeakerFooter}>
+        <LinearGradient pointerEvents="none" colors={['transparent','rgba(13, 4, 2, 0.45)','rgba(13, 4, 2, 0.85)','#0D0402']} locations={[0,.25,.65,1]} style={[StyleSheet.absoluteFill,{top:-36}]}/>
+        <BlurView intensity={Platform.OS === 'web' ? 15 : 25} tint="dark" style={StyleSheet.absoluteFill}/>
+        <View style={chat.footerInner}>{footerContent}</View>
+      </View>
+    </View></KeyboardAvoidingView>}
+    {confirmClose && <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmClose(false)}><View style={chat.modalBackdrop}><BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill}/><View style={chat.modalCard}>
+      <Text style={chat.modalTitle}>Close this chat?</Text><Text style={chat.modalSubtitle}>Your conversation and recordings will be saved.</Text>
+      <View style={chat.modalButtonsRow}><GlassButton label="Keep chatting" onPress={() => setConfirmClose(false)} style={chat.modalButton}><Text style={chat.modalButtonText}>Keep chatting</Text></GlassButton><GlassButton label="Save and close chat" onPress={() => void close()} style={[chat.modalButton,chat.endButton]}><Text style={chat.modalButtonText}>Save & close</Text></GlassButton></View>
+    </View></View></Modal>}
+    {quickSettingsOpen && <Modal visible transparent animationType="fade" onRequestClose={() => setQuickSettingsOpen(false)}><View style={chat.modalBackdrop}><BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFill}/><View style={chat.quickSettingsCard}>
+      <View style={chat.quickSettingsHeader}><Text style={chat.modalTitle}>Voice & Language</Text><GlassButton label="Close settings" onPress={() => setQuickSettingsOpen(false)} style={chat.quickCloseButton}><DesignIcon name="close"/></GlassButton></View>
+      <Text style={chat.quickSettingsSubtitle}>{session.scenario.language} · {session.persona.voice}</Text>
+      <MotionPressable accessibilityRole="switch" accessibilityState={{checked:autoListen}} accessibilityLabel="Automatic microphone capture after Coachie speaks" onPress={() => {automatic.current=!automatic.current;setAutoListen(automatic.current);}} style={chat.morePreferencesButton}><Text style={chat.morePreferencesText}>Automatic listening {autoListen ? 'on' : 'off'}</Text></MotionPressable>
+      <GlassButton label="Open voice preferences" onPress={() => {setQuickSettingsOpen(false);navigation.navigate('Preferences',{page:'voice'});}} style={chat.modalButton}><Text style={chat.modalButtonText}>Voice & language preferences</Text></GlassButton>
+      <GlassButton label="Delete A/B session" onPress={() => {setQuickSettingsOpen(false);setConfirmDelete(true);}} style={chat.modalButton}><Text style={chat.modalButtonText}>Delete chat</Text></GlassButton>
+    </View></View></Modal>}
+    {confirmDelete && <Modal visible transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}><View style={chat.modalBackdrop}><View style={chat.modalCard}><Text style={chat.modalTitle}>Delete chat and recordings?</Text><View style={chat.modalButtonsRow}>
+      <GlassButton label="Cancel deletion" onPress={() => setConfirmDelete(false)} style={chat.modalButton}><Text style={chat.modalButtonText}>Cancel</Text></GlassButton>
+      <GlassButton label="Confirm delete recordings and transcripts" onPress={() => void operate(async () => {await capture.current!.dispose();await stopPlayback();await deleteABSession(session.id);exiting.current=true;navigation.popToTop();})} style={[chat.modalButton,chat.endButton]}><Text style={chat.modalButtonText}>Delete</Text></GlassButton>
+    </View></View></View></Modal>}
+  </DesignFrame>;
 }
 
 const styles = StyleSheet.create({

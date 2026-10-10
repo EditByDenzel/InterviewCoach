@@ -13,6 +13,7 @@ export interface Scenario {
   maxMinutes: number;
   minTurns?: number;
   sourceText?: string;
+  topic?: string;
   uncertainties?: string[];
   evaluationPriorities?: string[];
   searchRequired?: boolean;
@@ -62,6 +63,7 @@ export function isScenario(value: any): value is Scenario {
     nonnegative(value.minMinutes) && nonnegative(value.maxMinutes) && value.maxMinutes > 0 && value.minMinutes <= value.maxMinutes &&
     (value.minTurns === undefined || (Number.isInteger(value.minTurns) && value.minTurns >= 0)) &&
     (value.sourceText === undefined || isText(value.sourceText)) &&
+    (value.topic === undefined || isText(value.topic)) &&
     (value.uncertainties === undefined || isTextList(value.uncertainties)) &&
     (value.evaluationPriorities === undefined || isTextList(value.evaluationPriorities)) &&
     (value.searchRequired === undefined || typeof value.searchRequired === 'boolean');

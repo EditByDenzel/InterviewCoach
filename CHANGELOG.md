@@ -8,6 +8,35 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Restore the original chat and remove scenario setup — 2026-10-11
+
+- Removed the mandatory scenario review screen and all launch-time goal, role,
+  facts, constraints, duration, search and priority controls. Sending a topic
+  starts Model A directly; photo instructions are extracted in the background.
+  Saved voice/language preferences apply. Simple topics skip extra extraction
+  and do not fabricate personal facts or a proposed user goal.
+- Restored the original gradient topic bubble, Aira pill, glass audio cards,
+  collapsible English transcripts, gradient microphone, circular controls,
+  Voice Mode, mute, close dialog and atmospheric footer fade. Shared original
+  chat styles serve both legacy and A/B screens. Only model dividers and run
+  switching extend the conversation flow; generated scenario headings and
+  speech/transcript/time/objective metadata are removed.
+- Hidden scrollbars while retaining bounded automatic scrolling. Compact header
+  spacing keeps the Model A/B pill and speaker button inside narrow phones.
+  Recovery actions appear only on failure, using compact original-style links.
+  Preserved separate model contexts, opener audio reuse, retained recordings,
+  completed-reply transcription, retries and post-run comparison/user vote.
+- Fixed mute state carrying into a new chat. Added regression checks for direct
+  launch, saved preferences, no invented facts, internal photo instructions,
+  cancelled photo processing and restored speaker controls.
+- Verified **179 tests across 17 suites**, TypeScript and whitespace checks.
+  Browser fixtures checked direct launch, restored audio cards/footer, model
+  switch, pause, voice/chat mode, mute and saved-chat reopen at 320/390 widths.
+  Hidden scrollbars and a bounded narrow-screen header were inspected in the DOM.
+  Exported web, Android and iOS bundles with private environment keys excluded.
+  These are simulated/browser and bundling checks; physical-device camera/audio
+  and live-provider naturalness remain unverified.
+
 ### Scenario A/B conversations and recovery â€” 2026-10-10
 
 - Home now opens an editable scenario review from a typed topic, camera photo or

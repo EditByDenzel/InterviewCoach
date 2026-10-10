@@ -1,10 +1,10 @@
 # Coachie delivery plan
 
-Updated 10 October 2026. The primary app is now scenario-based A/B role-play; the legacy interview route remains supported. Detailed source mapping and acceptance boundaries are in AB_IMPLEMENTATION_PLAN.md.
+Updated 11 October 2026. The primary app is now scenario-based A/B role-play; the legacy interview route remains supported. Detailed source mapping and acceptance boundaries are in AB_IMPLEMENTATION_PLAN.md.
 
 ## Implemented
 
-- Typed/photo scenario import and editable English review, including objective, role, facts, constraints, language, duration, optional minimum exchanges, search requirement and priorities.
+- Direct topic/photo launch into the original chat. Photo instructions and scenario policy run in the background; voice/language come from saved preferences. No mandatory setup or goal form.
 - Explicit A -> B flow in one chat, divider, shared opener/character and independent reasoning contexts.
 - Context-aware natural tasker questions, safe exact-audio reuse, adult Thai/English/Nigerian English directions and preview.
 - Automatic/manual capture, pause, replay, retained whole-reply transcription, background source/English display, and stage-specific retry.

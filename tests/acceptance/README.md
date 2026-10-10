@@ -4,6 +4,7 @@ ab-session.feature has **no Gherkin step bindings** and is not discovered by Jes
 
 | Specification area | Current executable files | Boundary |
 |---|---|---|
+| Direct topic launch and background photo context | tests/conversationSetup.test.ts; tests/abSessionScreen.test.ts | Mocked provider/device boundaries, original chat regression checks |
 | Scenario fields, uncertainty and untrusted image data | tests/scenarioImport.test.ts | Mocked responses, not measured OCR fidelity |
 | Camera/library cancellation and permissions | tests/scenarioImagePicker.test.ts | Adapter tests, not a real camera |
 | Lifecycle, duration, idempotency, isolation, cache identity and vote | tests/abSession.test.ts | Pure domain, not UI event ordering |

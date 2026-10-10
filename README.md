@@ -14,8 +14,8 @@ Use an SDK 51-compatible client or development build. Android and iPhone are bot
 ## Scenario flow
 
 1. Type a topic/scenario or tap Photo to capture/import an image.
-2. Review the extracted English title, role, objective, facts, constraints, language, duration, optional minimum exchanges, search requirement and evaluation priorities. Correct unclear or missing details before starting.
-3. Choose/preview a character and explicitly start Model A.
+2. Sending the topic opens the original chat and starts Model A. Photo instructions are extracted in the background; there is no scenario setup form or invented personal goal. Saved voice/language preferences apply, with explicit photo instructions retained internally.
+3. The original chat cards, gradients, footer and controls remain, with Model A/B dividers. Tap the Model A/B header pill to finish that run.
 4. Coachie speaks in the selected language. Record the model's answer with automatic listening or manual controls; pause, stop or replay as needed.
 5. After recording stops, the app transcribes the original language, translates to English when needed and chooses a context-aware follow-up. Original source text stays in background evidence. Live captions are not required or implemented.
 6. End A, switch models on the computer and explicitly start B below its divider. B reuses the same saved opener while its reasoning history starts fresh.

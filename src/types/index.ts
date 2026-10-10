@@ -56,8 +56,7 @@ export type InterviewPhase =
 /** Navigation param list */
 export type RootStackParamList = {
   Home: { topic?: string } | undefined;
-  Scenario: { draft: string; photo?: boolean };
-  ABSession: { scenario: import('../domain/abSession').Scenario; id?: string };
+  ABSession: { scenario?: import('../domain/abSession').Scenario; topic?: string; image?: import('../services/scenarioImportService').ScenarioImage; id?: string };
   Interview: { topic: string };
   Summary: { rounds: InterviewRound[]; closingMessage: string; topic: string; saveWarning?: string };
   Settings: undefined;
