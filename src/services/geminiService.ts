@@ -15,6 +15,48 @@ const TEXT_MODEL = 'gemini-3.8-flash';      // Latest stable Flash — long-hori
 const TTS_MODEL = 'gemini-3.8-flash-tts';   // Flagship TTS — studio-grade voice fidelity
 const TRANSCRIBE_MODEL = 'gemini-3.8-flash'; // Flash handles audio understanding + transcription
 
+// Cover both the request and response body. Some runtimes or interrupted
+// connections do not settle fetch promptly after abort, so also race a deadline.
+export async function requestJson(url: string, init: RequestInit, stage: string, timeoutMs = 60000): Promise<any> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`Gemini ${stage} request timed out. Please try again.`));
+      controller.abort();
+    }, timeoutMs);
+  });
+  const request = async () => {
+    const response = await designPreviewFetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(`Gemini ${stage} API error ${response.status}: ${message}`);
+    }
+    return response.json();
+  };
+  try {
+    return await Promise.race([request(), deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+export function readCompleteText(json: any, stage: 'text' | 'transcription'): string {
+  const candidate = json?.candidates?.[0];
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error(`Gemini ${stage} was cut short. Please try again; the partial response was not accepted.`);
+  }
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`Gemini ${stage} could not be completed (${candidate.finishReason}). Please try again.`);
+  }
+  const parts = candidate?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.filter((part: any) => typeof part?.text === 'string' && !part.thought).map((part: any) => part.text).join('').trim()
+    : '';
+  if (!text) throw new Error(`Gemini returned empty ${stage} response`);
+  return text;
+}
+
 // --------------- Conversation message type -----------------
 export interface GeminiMessage {
   role: 'user' | 'model';
@@ -67,23 +109,13 @@ export async function generateInterviewText(
     },
   };
 
-  const res = await designPreviewFetch(url, {
+  const json = await requestJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, 'text');
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini text API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json();
-  const text: string =
-    json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-  if (!text) throw new Error('Gemini returned empty text response');
-  return text.trim();
+  return readCompleteText(json, 'text');
 }
 
 // ===========================================================
@@ -101,26 +133,20 @@ export async function generateGeminiTTS(
   apiKey: string,
   text: string,
   voiceName: string = 'Kore',
+  style: string = 'Speak clearly and naturally at a comfortable conversational pace.',
 ): Promise<string> {
   const url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
   const body = {
     model: TTS_MODEL,
-    input: [{type:'user_input',content:[{type:'text',text,annotations:[{type:'speech_metadata',style:'Speak clearly and naturally at a comfortable conversational pace.'}]}]}],
+    input: [{type:'user_input',content:[{type:'text',text,annotations:[{type:'speech_metadata',style}]}]}],
     response_format: {type:'audio'},
     generation_config: {speech_config:[{voice:voiceName}]},
   };
-  const res = await designPreviewFetch(url, {
+  const json = await requestJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini TTS API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json();
+  }, 'TTS', 120000);
   const audioParts = (json.steps ?? []).filter((step:any)=>step.type==='model_output').flatMap((step:any)=>step.content ?? []).filter((part:any)=>part.type==='audio');
   const base64Audio: string | undefined = audioParts[audioParts.length-1]?.data;
 
@@ -167,25 +193,15 @@ export async function transcribeAudio(
     ],
     generationConfig: {
       temperature: 0,
-      maxOutputTokens: 300,
+      maxOutputTokens: 8192,
     },
   };
 
-  const res = await designPreviewFetch(url, {
+  const json = await requestJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, 'transcribe');
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini transcribe API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json();
-  const transcript: string =
-    json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-  if (!transcript) throw new Error('Gemini transcription returned empty result');
-  return transcript.trim();
+  return readCompleteText(json, 'transcription');
 }

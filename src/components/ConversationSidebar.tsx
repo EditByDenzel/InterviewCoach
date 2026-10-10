@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, BackHandler, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SavedConversation } from '../types';
 import { DESIGN, DesignIcon, TrashIcon } from './CoachieDesign';
-import { deleteConversation } from '../store/conversationStore';
+import { deleteConversation } from '../store/conversationLibrary';
 import { easeDrawer, LiveDots, MotionPressable, useMotion } from './Motion';
 
 type Props = {
@@ -32,8 +32,46 @@ export function ConversationSidebar({
   const window = useWindowDimensions();
   const [mounted, setMounted] = useState(open);
   const progress = useRef(new Animated.Value(0)).current;
-  const width = Math.min(340, window.width * 0.88);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const deletePending = useRef(false);
+  const alive = useRef(true);
+  const panel = useRef<View>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+
+  useEffect(() => {
+    if (!open) { setConfirmDeleteId(null); setDeleteError(''); }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !mounted) return;
+    if (Platform.OS !== 'web') {
+      const listener = BackHandler.addEventListener('hardwareBackPress', () => { close.current(); return true; });
+      return () => listener.remove();
+    }
+    const element = panel.current as unknown as HTMLElement | null;
+    if (!element) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const focusable = () => Array.from(element.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')).filter(item => item.getAttribute('aria-disabled') !== 'true' && item.getClientRects().length > 0);
+    focusable()[0]?.focus({ preventScroll: true });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); }
+      if (event.key !== 'Tab') return;
+      const targets = focusable();
+      if (!targets.length) { event.preventDefault(); return; }
+      const first = targets[0], last = targets[targets.length - 1];
+      if (!element.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); first.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [open, mounted]);
 
   useEffect(() => {
     if (open) setMounted(true);
@@ -42,6 +80,7 @@ export function ConversationSidebar({
       duration: reduced ? 0 : open ? 260 : 180,
       easing: easeDrawer,
       useNativeDriver: Platform.OS !== 'web',
+      isInteraction: false,
     });
     animation.start(({ finished }) => {
       if (finished && !open) setMounted(false);
@@ -51,12 +90,22 @@ export function ConversationSidebar({
 
   const handleDelete = async (id: string, e?: any) => {
     e?.stopPropagation?.();
+    if (deletePending.current) return;
     if (confirmDeleteId === id) {
+      deletePending.current = true;
+      setDeletingId(id);
+      setDeleteError('');
       try {
         await deleteConversation(id);
+        if (!alive.current) return;
         setConfirmDeleteId(null);
         onRetry();
-      } catch (_) {}
+      } catch (_) {
+        if (alive.current) setDeleteError('Could not delete this conversation. Please try again.');
+      } finally {
+        deletePending.current = false;
+        if (alive.current) setDeletingId(null);
+      }
     } else {
       setConfirmDeleteId(id);
     }
@@ -86,6 +135,10 @@ export function ConversationSidebar({
 
       {/* Drawer Panel inside phone frame */}
       <Animated.View
+        ref={panel}
+        accessibilityViewIsModal={open}
+        accessibilityLabel="Conversation history"
+        aria-hidden={!open}
         style={[
           styles.panel,
           {
@@ -107,7 +160,7 @@ export function ConversationSidebar({
                   <Text accessibilityRole="header" style={styles.title}>
                     Conversations
                   </Text>
-                  <Text style={styles.caption}>Your practice history</Text>
+                  <Text style={styles.caption}>Your saved conversations</Text>
                 </View>
                 <MotionPressable
                   accessibilityRole="button"
@@ -123,7 +176,7 @@ export function ConversationSidebar({
                 <View style={styles.newSection}>
                   <MotionPressable
                     accessibilityRole="button"
-                    accessibilityLabel="Start a new interview"
+                    accessibilityLabel="Start a new conversation"
                     onPress={() => {
                       onClose();
                       onNew();
@@ -136,7 +189,7 @@ export function ConversationSidebar({
                       end={{ x: 1, y: 0 }}
                       style={StyleSheet.absoluteFill}
                     />
-                    <Text style={styles.newButtonText}>+ New interview</Text>
+                    <Text style={styles.newButtonText}>+ New conversation</Text>
                   </MotionPressable>
                 </View>
               )}
@@ -146,6 +199,7 @@ export function ConversationSidebar({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.list}
               >
+                {!!deleteError && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.description, { padding: 12, color: '#FCA5A5' }]}>{deleteError}</Text>}
                 {loading ? (
                   <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', padding: 16 }}>
                     <Text style={styles.description}>Loading conversations…</Text>
@@ -164,39 +218,24 @@ export function ConversationSidebar({
                   <View style={styles.empty}>
                     <Text style={styles.itemTitle}>Your next conversation starts here.</Text>
                     <Text style={styles.description}>
-                      Practice a topic and your questions, answers, and feedback will appear here.
+                      Start a scenario and your conversations and comparison will appear here.
                     </Text>
                   </View>
                 ) : (
                   conversations.map((item) => {
                     const isLatest = item.id === mostRecentId && !item.isSample;
                     return (
+                      <View key={item.id} style={[styles.item, isLatest && styles.itemLatest, { padding: 0 }]}>
                       <MotionPressable
                         accessibilityRole="button"
                         accessibilityLabel={`Open conversation: ${item.topic}`}
-                        key={item.id}
                         onPress={() => onSelect(item.id)}
-                        style={[styles.item, isLatest && styles.itemLatest]}
+                        style={{ padding: 16, gap: 8, borderRadius: 16 }}
                       >
                         <View style={styles.itemHeaderRow}>
-                          <Text numberOfLines={2} style={[styles.itemTitle, isLatest && { color: '#FFF' }]}>
+                          <Text numberOfLines={2} style={[styles.itemTitle, { paddingRight: confirmDeleteId === item.id ? 64 : 44 }, isLatest && { color: '#FFF' }]}>
                             {item.topic}
                           </Text>
-                          <View style={styles.actionsCluster}>
-                            {isLatest && <View style={styles.recentDot} />}
-                            <MotionPressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Delete conversation: ${item.topic}`}
-                              onPress={(e) => handleDelete(item.id, e)}
-                              style={[styles.deleteButton, confirmDeleteId === item.id && styles.deleteButtonConfirm]}
-                            >
-                              {confirmDeleteId === item.id ? (
-                                <Text style={styles.deleteConfirmLabel}>Delete?</Text>
-                              ) : (
-                                <TrashIcon size={14} color="#9E928A" />
-                              )}
-                            </MotionPressable>
-                          </View>
                         </View>
                         <Text style={styles.meta}>
                           {item.isSample
@@ -209,6 +248,13 @@ export function ConversationSidebar({
                           {item.status === 'completed' ? 'Completed' : 'In progress'}
                         </Text>
                       </MotionPressable>
+                      <View style={[styles.actionsCluster, { position: 'absolute', top: 10, right: 10 }]}>
+                        {isLatest && <View pointerEvents="none" style={styles.recentDot} />}
+                        <MotionPressable accessibilityRole="button" accessibilityLabel={`Delete conversation: ${item.topic}`} disabled={deletingId !== null} onPress={(e) => handleDelete(item.id, e)} style={[styles.deleteButton, confirmDeleteId === item.id && styles.deleteButtonConfirm]}>
+                          {confirmDeleteId === item.id ? <Text style={styles.deleteConfirmLabel}>{deletingId === item.id ? 'Deleting…' : 'Delete?'}</Text> : <TrashIcon size={14} color="#9E928A" />}
+                        </MotionPressable>
+                      </View>
+                      </View>
                     );
                   })
                 )}
@@ -291,6 +337,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   deleteButton: {
+    minWidth: 36,
+    minHeight: 36,
     padding: 6,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.06)',

@@ -11,6 +11,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { loadSettings, saveSettings, updateSettings, getGeminiApiKey, getTTSProvider } from '../src/store/settingsStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 describe('Settings Store', () => {
   beforeEach(() => {
@@ -54,5 +55,26 @@ describe('Settings Store', () => {
 
     expect(await getGeminiApiKey()).toBe('test-gemini-key');
     expect(await getTTSProvider()).toBe('elevenlabs');
+  });
+
+  it('serializes rapid preference changes without losing another page or key update', async () => {
+    await Promise.all([
+      saveSettings({ geminiApiKey: 'preserved-key', elevenLabsApiKey: '', ttsProvider: 'gemini' }),
+      updateSettings({ language: 'Thai' }),
+      updateSettings({ geminiVoice: 'Puck' }),
+    ]);
+    expect(await loadSettings()).toMatchObject({ geminiApiKey: 'preserved-key', language: 'Thai', geminiVoice: 'Puck' });
+  });
+
+  it('recovers the write queue after a storage failure', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      (AsyncStorage.setItem as jest.Mock).mockRejectedValueOnce(new Error('Storage full'));
+      await expect(updateSettings({ language: 'Thai' })).rejects.toThrow('Storage full');
+      await updateSettings({ geminiVoice: 'Puck' });
+      expect((await loadSettings()).geminiVoice).toBe('Puck');
+    } finally {
+      warning.mockRestore();
+    }
   });
 });

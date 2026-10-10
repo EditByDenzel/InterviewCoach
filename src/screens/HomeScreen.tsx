@@ -3,9 +3,10 @@ import { View, Text, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } fr
 import { useFocusEffect } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { RootStackParamList, SavedConversation } from '../types';
 import { loadSettings } from '../store/settingsStore';
-import { loadConversationLibrary } from '../store/conversationStore';
+import { loadConversationLibrary } from '../store/conversationLibrary';
 import { DesignFrame, DesignIcon, GlassButton, DESIGN, ProfileIcon } from '../components/CoachieDesign';
 import { MotionPressable } from '../components/Motion';
 import { TopicComposer } from '../components/TopicComposer';
@@ -21,6 +22,7 @@ export default function HomeScreen({navigation,route}:Props) {
  const [topic,setTopic]=useState(''),[hasApiKey,setHasApiKey]=useState(false),[validation,setValidation]=useState('');
  const [sidebar,setSidebar]=useState(false),[conversations,setConversations]=useState<SavedConversation[]>([]),[historyError,setHistoryError]=useState(''),[loadingHistory,setLoadingHistory]=useState(false);
  const scrollRef = React.useRef<ScrollView>(null);
+ const starting = React.useRef(false);
  useEffect(() => {
    if (Platform.OS !== 'web') return;
    const getEl = () => (scrollRef.current as any)?.getScrollableNode?.() || (scrollRef.current as any);
@@ -29,8 +31,11 @@ export default function HomeScreen({navigation,route}:Props) {
    let down = false;
    let startX = 0;
    let scrollLeft = 0;
+   let dragged = false;
    const onMouseDown = (e: MouseEvent) => {
+     if (e.button !== 0) return;
      down = true;
+     dragged = false;
      startX = e.pageX - (node.getBoundingClientRect?.().left || 0);
      scrollLeft = node.scrollLeft;
      node.style.cursor = 'grabbing';
@@ -41,8 +46,10 @@ export default function HomeScreen({navigation,route}:Props) {
      e.preventDefault();
      const x = e.pageX - (node.getBoundingClientRect?.().left || 0);
      const walk = (x - startX) * 1.35;
+     if (Math.abs(x - startX) > 6) dragged = true;
      node.scrollLeft = scrollLeft - walk;
    };
+   const onClick = (e: MouseEvent) => { if (dragged) { e.preventDefault(); e.stopPropagation(); dragged = false; } };
    const onMouseUp = () => {
      down = false;
      node.style.cursor = 'grab';
@@ -50,12 +57,16 @@ export default function HomeScreen({navigation,route}:Props) {
    };
    node.style.cursor = 'grab';
    node.addEventListener('mousedown', onMouseDown);
+   node.addEventListener('click', onClick, true);
    window.addEventListener('mousemove', onMouseMove);
    window.addEventListener('mouseup', onMouseUp);
+   window.addEventListener('blur', onMouseUp);
    return () => {
      node.removeEventListener('mousedown', onMouseDown);
+     node.removeEventListener('click', onClick, true);
      window.removeEventListener('mousemove', onMouseMove);
      window.removeEventListener('mouseup', onMouseUp);
+     window.removeEventListener('blur', onMouseUp);
    };
  }, []);
  const refreshHistory=useCallback(async()=>{setLoadingHistory(true);try{setConversations(await loadConversationLibrary());setHistoryError('');}catch{setHistoryError('Could not load your saved conversations. Please try again.');}finally{setLoadingHistory(false);}},[]);
@@ -72,13 +83,16 @@ export default function HomeScreen({navigation,route}:Props) {
    rounds: mostRecentUserConv.rounds.length,
    status: mostRecentUserConv.status === 'completed' ? 'Completed' : 'In progress',
    isRecent: true,
+   isAB: mostRecentUserConv.isAB,
    icon: 'interview' as const,
   };
   return [recentCard, ...suggestions.slice(0, 2)];
  }, [mostRecentUserConv]);
 
  const start=()=>{
+  if(starting.current)return;
   if(!topic.trim()){setValidation('Enter a topic or choose a prompt above.');return;}
+  starting.current=true;
   void loadSettings().then(settings=>{
     const key=(settings.geminiApiKey||'').trim();
     if(!key){
@@ -88,14 +102,14 @@ export default function HomeScreen({navigation,route}:Props) {
     }
     setHasApiKey(true);
     setValidation('');
-    navigation.navigate('Interview',{topic:topic.trim()});
-  });
+    navigation.navigate('Scenario',{draft:topic.trim()});
+  }).catch(()=>setValidation('Could not load your settings. Please try again.')).finally(()=>{starting.current=false;});
  };
  return <DesignFrame><KeyboardAvoidingView aria-hidden={sidebar} accessibilityElementsHidden={sidebar} importantForAccessibility={sidebar?'no-hide-descendants':'auto'} style={styles.fill} behavior={Platform.OS==='ios'?'padding':undefined}>
   <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
    <View style={styles.header}><View style={styles.brand}><MotionPressable accessibilityRole="button" accessibilityLabel="Coachie settings" onPress={()=>navigation.navigate('Settings')} style={styles.logo}><ProfileIcon size={22} color="#FFF"/></MotionPressable><View><Text style={styles.brandName}>Coachie,</Text><Text style={styles.welcome}>Welcome back</Text></View></View><GlassButton label="Recent conversations" onPress={()=>{setSidebar(true);void refreshHistory();}} style={styles.menu}><DesignIcon name="menu"/></GlassButton></View>
-    <View style={styles.heroGroup}><Text style={styles.title}>{mostRecentUserConv ? 'Continue or start\na conversation.' : 'Start a\nconversation here.'}</Text><ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards} style={styles.cardScroll}>{displaySuggestions.map(item=><MotionPressable lift key={item.id} accessibilityRole="button" accessibilityLabel={`Open ${item.topic}`} onPress={()=>navigation.navigate('Conversation',{id:item.id})} style={styles.card}><LinearGradient pointerEvents="none" colors={(item as any).isRecent ? ['#6E2C10', '#321307'] : ['#44271A', '#20130E']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/><View style={styles.cardTopRow}><DesignIcon name={item.icon}/></View><View style={{gap:4}}><Text numberOfLines={2} style={styles.cardLabel}>{item.label}</Text><Text style={styles.sampleMeta}>{(item as any).isRecent ? `${item.rounds} ${item.rounds===1?'round':'rounds'} · ${(item as any).status}` : `${item.rounds} rounds`}</Text></View></MotionPressable>)}</ScrollView></View>
-    <View style={styles.composerArea}><TopicComposer value={topic} onChange={value=>{setTopic(value);setValidation('');}} onSend={start}/>{!!validation&&<View style={styles.validationArea}><Text accessibilityLiveRegion="polite" style={styles.validation}>{validation}</Text>{!hasApiKey&&<MotionPressable accessibilityRole="button" onPress={()=>navigation.navigate('Preferences',{page:'keys'})} style={styles.keyAction}><Text style={styles.keyLabel}>Add API key</Text></MotionPressable>}</View>}<View style={styles.toolbar}><GlassButton label="AI model and voice settings" onPress={()=>navigation.navigate('Preferences',{page:'voice'})} style={styles.model}><Text style={styles.modelText}>Gemini 3.8 Flash</Text><DesignIcon name="chevron"/></GlassButton><Text style={styles.hint}>{Platform.OS==='web'?'Enter to send':'5 questions'}</Text></View></View>
+    <View style={styles.heroGroup}><Text style={styles.title}>{mostRecentUserConv ? 'Continue or start\na conversation.' : 'Start a\nconversation here.'}</Text><ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards} style={styles.cardScroll}>{displaySuggestions.map(item=><MotionPressable lift key={item.id} accessibilityRole="button" accessibilityLabel={`Open ${item.topic}`} onPress={()=>navigation.navigate('Conversation',{id:item.id})} style={styles.card}><LinearGradient pointerEvents="none" colors={(item as any).isRecent ? ['#6E2C10', '#321307'] : ['#44271A', '#20130E']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/><View style={styles.cardTopRow}><DesignIcon name={item.icon}/></View><View style={{gap:4}}><Text numberOfLines={2} style={styles.cardLabel}>{item.label}</Text><Text style={styles.sampleMeta}>{(item as any).isRecent ? `${item.rounds} ${(item as any).isAB?'replies · A/B':item.rounds===1?'round':'rounds'} · ${(item as any).status}` : `${item.rounds} rounds`}</Text></View></MotionPressable>)}</ScrollView></View>
+    <View style={styles.composerArea}><TopicComposer value={topic} onChange={value=>{setTopic(value);setValidation('');}} onSend={start}/>{!!validation&&<View style={styles.validationArea}><Text accessibilityLiveRegion="polite" style={styles.validation}>{validation}</Text>{!hasApiKey&&<MotionPressable accessibilityRole="button" onPress={()=>navigation.navigate('Preferences',{page:'keys'})} style={styles.keyAction}><Text style={styles.keyLabel}>Add API key</Text></MotionPressable>}</View>}<View style={styles.toolbar}><GlassButton label="AI model and voice settings" onPress={()=>navigation.navigate('Preferences',{page:'voice'})} style={styles.model}><Text style={styles.modelText}>Gemini 3.8 Flash</Text><DesignIcon name="chevron"/></GlassButton><GlassButton label="Import scenario from photo" onPress={()=>navigation.navigate('Scenario',{draft:topic,photo:true})} style={[styles.model,{paddingHorizontal:12}]}><Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#D8C9C1" strokeWidth={1.6}><Path d="M8 5l1-2h6l1 2h4v15H4V5h4Z"/><Circle cx={12} cy={12} r={4}/></Svg><Text style={styles.modelText}>Photo</Text></GlassButton></View></View>
    </ScrollView>
   </KeyboardAvoidingView><ConversationSidebar open={sidebar} onClose={()=>setSidebar(false)} conversations={conversations} error={historyError} loading={loadingHistory} onRetry={()=>void refreshHistory()} onNew={()=>{setTopic('');setValidation('');}} onSelect={id=>{setSidebar(false);navigation.navigate('Conversation',{id});}}/></DesignFrame>;
 }

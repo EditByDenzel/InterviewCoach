@@ -8,6 +8,55 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Scenario A/B conversations and recovery — 2026-10-10
+
+- Home now opens an editable scenario review from a typed topic, camera photo or
+  imported screenshot. Review role, objective, facts, constraints, speaking
+  language, duration, optional minimum exchanges, search requirement and priorities
+  in English before starting. Camera/library permissions and cancellation preserve
+  drafts; unreadable extraction details remain uncertain.
+- Added tasker role-play with explicit Model A and Model B runs, a divider,
+  shared opener/persona and isolated reasoning histories. Adaptive follow-ups use
+  fixed scenario facts and each model's actual replies. Scenario time and explicit
+  minimum exchanges replace a universal five/ten-question budget.
+- Added adult Thai, English and Nigerian English character directions, voice
+  previews and separate TTS style metadata. Exact utterance caching and validated
+  scenario-only reuse avoid resynthesizing a present shared opener; no measured
+  naturalness, accent fidelity or savings percentage is claimed.
+- Selected completed-reply transcription: record, stop, transcribe original
+  language, translate to English, then choose a contextual follow-up. Thai source
+  remains background evidence while both speakers' visible text is English.
+  Live captions are optional future work, not a release requirement.
+- Added durable native document/browser IndexedDB recordings, serialized A/B
+  metadata, resumable pending replies and reference-aware deletion. Reserve audio
+  ownership before writes; release temporary captures only after durable saves.
+  Stage-specific retries avoid duplicate accepted turns and repeated evaluations.
+  An unusable unfinished recording can be explicitly deleted to capture again.
+- Added final evidence-referenced comparison, original evaluated-model audio when
+  available, insufficient-evidence handling, an independent A/B/tie/unsure vote
+  and English transcript sharing. Missing capture and unverified factual/search
+  claims are explicit limitations. Legacy interview history remains separate.
+- Fixed stale recording callbacks, late permission/start cleanup, web/native
+  speech detection, pause/replay/background handling, playback overlap and
+  cleanup. Removed the unconditional eight-second answer cutoff. Added provider
+  fetch/body deadlines, complete multipart response handling and truncation checks.
+- Refined press/release easing, animation cancellation, reduced-motion/background
+  cleanup, bounded composer growth, drawer keyboard focus/Escape, sibling history
+  actions and selected-state accessibility. Compact A/B controls fit narrow phones.
+- Verified **174 tests across 16 suites**, TypeScript and whitespace checks.
+  Exported web, Android and iOS bundles without private environment keys.
+  Browser fixtures completed both runs, English-visible Thai mode, comparison,
+  independent vote and reload/reopen; settled layouts had no horizontal overflow
+  at 320/390 widths. Additional fixture checks covered replay/deletion, cancellation
+  and reduced motion. Fixtures use simulated capture, canned replies and silent
+  audio; physical iOS/Android, real cameras/microphones, live provider quality,
+  language auditions and latency remain unverified. No store deployment is claimed.
+- Updated README, architecture, handoff, product plan, A/B plan/brief, research
+  status and acceptance specifications. The private Live S2S reference informed
+  fairness principles and scenario-specific rules; this independent app is not a
+  claimed compliant integration with that platform. Private source media stays out
+  of Git. Earlier entries below describe historical implementation states.
+
 ### Polish, In-App Drawer, Reactive Audio & Telegram Controls — 2026-10-10
 - **In-App Sidebar Drawer**: Confined the conversation sidebar overlay strictly within `DesignFrame` as an absolute in-frame overlay rather than a root browser modal. On desktop web, the drawer and dim backdrop animate strictly within the phone mockup rather than detaching to the browser edge.
 - **Delete Conversations**: Added chat deletion in `ConversationSidebar` with two-tap confirmation (`Delete?`) and persistent tracking of deleted sample chats in `@coachie_deleted_samples_v1` so deleted chats never resurface. Added delete conversation action and modal dialog in `ConversationScreen`.

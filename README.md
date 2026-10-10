@@ -1,135 +1,46 @@
-# 🎙️ InterviewCoach
+# Coachie
 
-An AI-powered mock interview app built with **React Native (Expo SDK 51)**, featuring:
+Coachie is a React Native / Expo SDK 51 app for scenario-based voice conversations and A/B assistant comparisons. Coachie plays the person asking for help; Model A and Model B answer from a computer while a phone captures their audio. The earlier five-round interview flow remains available to legacy sessions.
 
-- 🤖 **Gemini 3.8 Flash** for intelligent, contextual interview questions
-- 🔊 **Gemini 3.8 Flash TTS** or **ElevenLabs** for natural-sounding interviewer voice
-- 📝 **Gemini 3.8 Flash** audio transcription to capture your spoken answers
-- 🎨 **Material Design 3** (React Native Paper v5 + NativeWind v4)
-- 🎤 **Animated microphone FAB** with pulsing record indicator
+## Run
 
----
-
-## 📋 Prerequisites
-
-- [Node.js](https://nodejs.org/) ≥ 18
-- [Expo CLI](https://docs.expo.dev/get-started/installation/) — `npm install -g expo-cli`
-- [Expo Go](https://expo.dev/client) app on your phone, OR an Android/iOS emulator
-- **Gemini API key** from [Google AI Studio](https://aistudio.google.com/)
-- *(Optional)* [ElevenLabs API key](https://elevenlabs.io/) for higher-quality TTS
-
----
-
-## 🚀 Setup & Run
-
-```bash
-# 1. Clone / navigate to the project
-cd InterviewCoach
-
-# 2. Install dependencies
-npx expo install
-
-# 3. Start the dev server
-npx expo start
+```sh
+npm ci
+npm start
 ```
 
-Then scan the QR code with Expo Go, or press `a` for Android emulator / `i` for iOS simulator.
+Use an SDK 51-compatible client or development build. Android and iPhone are both targets; physical-device validation and distributable builds remain pending. `npm run web` opens the normal browser app. Enter your Gemini key through Home's Settings icon, then select a language and voice. The new A/B flow uses Gemini text, transcription and TTS; ElevenLabs remains an optional legacy-interview provider. Model availability and billing depend on your provider account.
 
----
+## Scenario flow
 
-## ⚙️ Configuration
+1. Type a topic/scenario or tap Photo to capture/import an image.
+2. Review the extracted English title, role, objective, facts, constraints, language, duration, optional minimum exchanges, search requirement and evaluation priorities. Correct unclear or missing details before starting.
+3. Choose/preview a character and explicitly start Model A.
+4. Coachie speaks in the selected language. Record the model's answer with automatic listening or manual controls; pause, stop or replay as needed.
+5. After recording stops, the app transcribes the original language, translates to English when needed and chooses a context-aware follow-up. Original source text stays in background evidence. Live captions are not required or implemented.
+6. End A, switch models on the computer and explicitly start B below its divider. B reuses the same saved opener while its reasoning history starts fresh.
+7. After both runs, review a comparison with turn evidence and limitations. Choose A, B, tie or insufficient evidence independently of the recommendation.
 
-1. Open the app and tap **Settings & API Keys** on the Home screen.
-2. Paste your **Gemini API key**.
-3. Choose your **TTS provider**:
-   - **Gemini TTS** — free, uses the "Kore" voice
-   - **ElevenLabs** — higher quality, requires a paid ElevenLabs key
-4. Tap **Save Settings**.
+There is no fixed five/ten-question budget. Scenario duration and any explicit minimum exchanges drive the conversation; the maximum time takes priority. Follow-ups adapt to answers while keeping scenario coverage comparable. A matching saved utterance can reuse its audio; adaptive decisions still need reasoning.
 
----
+Thai, English and Nigerian English character directions are provided for ordinary adults in their twenties/thirties. These are audition candidates, not verified accent or naturalness claims. English text is displayed by default even when the speech is Thai.
 
-## 🎯 App Flow
+## History and privacy
 
-| Step | Action |
-|------|--------|
-| 1 | Enter interview topic on Home screen (e.g. *React Native Developer*) |
-| 2 | Tap **Start Interview** |
-| 3 | AI generates a question and speaks it aloud |
-| 4 | Tap **Record Answer** (pulsing mic FAB) |
-| 5 | Speak your answer, then tap **Stop Recording** |
-| 6 | Answer is transcribed and fed back to AI |
-| 7 | Repeat for 5 rounds |
-| 8 | AI delivers a closing performance summary |
-| 9 | View full session transcript on the Summary screen |
+A/B transcripts, original/translated wording, comparisons and recordings stay locally until explicit deletion. Audio uses native document files or browser IndexedDB; metadata and settings use AsyncStorage. Local storage is not a cloud backup: uninstalling the app or clearing browser/OS storage can remove it. An unfinished unusable recording can be explicitly deleted to retry capture. Legacy sessions without retained audio show transcripts only.
 
----
+Scenario images, recordings, transcripts and relevant conversation context are sent to Google for extraction, transcription, translation, dialogue or evaluation. Available original model recordings are included in the final audio assessment; missing audio and unverified factual/search claims are reported as limitations. Keys are stored locally in AsyncStorage, which is not an encrypted credential vault. Never commit keys or private media. An `EXPO_PUBLIC_GEMINI_API_KEY` can seed development settings, but Expo public values are embedded in bundles: omit private keys from distributed builds.
 
-## 🗂️ File Structure
+The private Live S2S reference informed comparison principles. Its own platform prohibits AI-authored prompts/evaluations and requires headphones. This is an independent practice/evaluation app, not a claimed compliant integration with that platform.
 
-```
-InterviewCoach/
-├── App.tsx                          # Root — PaperProvider + Navigator
-├── app.json                         # Expo config + permissions
-├── babel.config.js                  # Babel + NativeWind preset
-├── tailwind.config.js               # NativeWind/Tailwind config
-├── tsconfig.json                    # TypeScript config
-├── nativewind-env.d.ts              # NativeWind className type shim
-└── src/
-    ├── theme.ts                     # MD3 dark theme + raw COLORS
-    ├── types/index.ts               # Shared TypeScript types
-    ├── navigation/AppNavigator.tsx  # Stack navigator
-    ├── store/settingsStore.ts       # AsyncStorage wrappers
-    ├── services/
-    │   ├── geminiService.ts         # Text gen, TTS, transcription
-    │   ├── elevenLabsService.ts     # ElevenLabs TTS
-    │   └── audioService.ts         # expo-av playback + recording
-    └── screens/
-        ├── HomeScreen.tsx           # Topic entry + navigation
-        ├── SettingsScreen.tsx       # API key + TTS config
-        ├── InterviewScreen.tsx      # Live 5-round interview loop
-        └── SummaryScreen.tsx        # Q&A transcript + AI feedback
+## Checks and preview
+
+```sh
+npm test -- --runInBand
+npx tsc --noEmit
+npm run preview:design
 ```
 
----
+The preview at port 8084 uses dummy credentials, canned replies, simulated microphone capture and silent audio. It makes no paid provider calls. Renderer/service/storage tests and browser fixtures do not establish physical microphone/camera reliability, translation quality, natural accents or live latency.
 
-## 🛠️ Key Technologies
-
-| Library | Purpose |
-|---------|---------|
-| `expo-av` | Audio recording + playback (loudspeaker) |
-| `expo-file-system` | Read/write temp audio files for TTS & transcription |
-| `react-native-paper` v5 | Material Design 3 UI components |
-| `nativewind` v4 | Tailwind CSS utility classes on React Native |
-| `react-native-reanimated` | Smooth mic pulse animation |
-| `@react-navigation/stack` | Screen navigation |
-| `@react-native-async-storage/async-storage` | Persist API keys |
-
----
-
-## 🔒 Privacy
-
-All API keys are stored locally on your device via AsyncStorage. They are only sent directly to **Google's Generative Language API** and/or **ElevenLabs** — never to any third-party server.
-
----
-
-## 📝 Notes
-
-- The app requires **microphone permission** to record answers. On iOS this is declared in `app.json` under `infoPlist`. On Android the `RECORD_AUDIO` permission is listed.
-- Audio plays through the **loudspeaker** by default (not earpiece) using `Audio.setAudioModeAsync`.
-- If TTS fails, check your Gemini API key and ensure the `gemini-3.8-flash-tts` model is available in your region.
-- Transcription uses `gemini-3.8-flash` with inline audio (base64). For best results, speak clearly in a quiet environment.
-
----
-
-## 📚 Documentation
-
-| File | Purpose |
-|------|---------|
-| [`README.md`](README.md) | Setup & quick start (this file) |
-| [`PLAN.md`](PLAN.md) | Full product plan, roadmap, P0 bugs, next steps |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Technical deep-dive: data flows, design decisions, API reference |
-| [`CHANGELOG.md`](CHANGELOG.md) | Version history (Keep-a-Changelog format) |
-
----
-
-*Built with ❤️ using Expo SDK 51 · Gemini 3.8 Flash · Material Design 3 · Oct 2026*
+See [AB_IMPLEMENTATION_PLAN.md](AB_IMPLEMENTATION_PLAN.md) for delivery status and the physical-device matrix, [AB_CONVERSATION_BRIEF.md](AB_CONVERSATION_BRIEF.md) for decisions, [VOICE_CONVERSATION_RESEARCH.md](VOICE_CONVERSATION_RESEARCH.md) for research, [ARCHITECTURE.md](ARCHITECTURE.md) for source boundaries and [CHANGELOG.md](CHANGELOG.md) for changes.

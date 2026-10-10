@@ -1,5 +1,5 @@
 import React, { PropsWithChildren, useState, useId, useEffect, useRef, useMemo } from 'react';
-import { View, Text, Animated, Easing, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, Animated, Easing, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle, TextStyle, AccessibilityState } from 'react-native';
 import { Asset } from 'expo-asset';
 import { figmaSvg } from './FigmaSvg';
 import Svg, { Defs, RadialGradient, Stop, Rect, Circle, SvgXml, Path } from 'react-native-svg';
@@ -84,19 +84,20 @@ export function Orb({ size = 28 }: { size?: number }) {
 }
 
 export function HeroOrb({ size = 176 }: { size?: number }) {
-  const { reduced } = useMotion();
+  const { reduced, foreground } = useMotion();
   const float = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (reduced) return;
+    float.setValue(0);
+    if (reduced || !foreground) return;
     const animation = Animated.loop(
       Animated.sequence([
-        Animated.timing(float, { toValue: 1, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web' }),
-        Animated.timing(float, { toValue: 0, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(float, { toValue: 1, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
+        Animated.timing(float, { toValue: 0, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
       ])
     );
     animation.start();
     return () => animation.stop();
-  }, [float, reduced]);
+  }, [float, reduced, foreground]);
 
   const translateY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
   const scale = float.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.025, 1] });
@@ -105,7 +106,7 @@ export function HeroOrb({ size = 176 }: { size?: number }) {
     <View style={[styles.heroOrbGlow, { width: size * 1.4, height: size * 1.4, borderRadius: (size * 1.4) / 2 }]} />
     <Animated.Image
       source={require('../../assets/figma/hero_orb.png')}
-      style={[{ width: size, height: size, transform: [{ translateY }, { scale }] }]}
+      style={[{ width: size, height: size, transform: [{ translateY: reduced ? 0 : translateY }, { scale: reduced ? 1 : scale }] }]}
       resizeMode="contain"
     />
   </View>;
@@ -126,19 +127,19 @@ const AI_WAVE_HEIGHTS = [8, 14, 20, 16, 8, 20, 24, 12, 16, 20, 10, 16, 24, 12, 8
 const CANDIDATE_WAVE_HEIGHTS = [6, 12, 16, 20, 12, 16, 20, 10, 12, 16, 20, 8, 12, 12, 6, 12, 16, 8, 14, 18];
 
 export function Waveform({ candidate = false, active = false, progress = 0 }: { candidate?: boolean; active?: boolean; progress?: number }) {
-  const { reduced } = useMotion();
+  const { reduced, foreground } = useMotion();
   const [containerWidth, setContainerWidth] = useState(0);
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     pulse.setValue(0);
-    if (!active || reduced) return;
+    if (!active || reduced || !foreground) return;
     const animation = Animated.loop(Animated.sequence([
       Animated.timing(pulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
       Animated.timing(pulse, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false })
     ]));
     animation.start(); return () => animation.stop();
-  }, [active, reduced, pulse]);
+  }, [active, reduced, foreground, pulse]);
 
   const step = candidate ? 7 : 5;
   const count = containerWidth > 0 ? Math.max(16, Math.floor(containerWidth / step)) : 34;
@@ -286,8 +287,8 @@ export function TrashIcon({ size = 16, color = '#FF7B60' }: { size?: number; col
   );
 }
 
-export function GlassButton({ children, onPress, label, style, disabled }: PropsWithChildren<{ onPress: () => void; label: string; style?: StyleProp<ViewStyle>; disabled?: boolean }>) {
-  return <MotionPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} style={[styles.glassButton, style]}>{children}</MotionPressable>;
+export function GlassButton({ children, onPress, label, style, disabled, accessibilityState }: PropsWithChildren<{ onPress: () => void; label: string; style?: StyleProp<ViewStyle>; disabled?: boolean; accessibilityState?: AccessibilityState }>) {
+  return <MotionPressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={accessibilityState} onPress={onPress} disabled={disabled} style={[styles.glassButton, style]}>{children}</MotionPressable>;
 }
 
 const styles = StyleSheet.create({

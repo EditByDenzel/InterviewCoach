@@ -4,7 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, SavedConversation } from '../types';
-import { loadConversationLibrary, deleteConversation } from '../store/conversationStore';
+import { loadConversationLibrary, deleteConversation } from '../store/conversationLibrary';
+import { loadABSession } from '../store/abSessionStore';
 import { DESIGN, DesignFrame, DesignIcon, GlassButton, Orb, Waveform, TranscriptionIcon, RetryIcon, TrashIcon } from '../components/CoachieDesign';
 import { FadeIn, MotionPressable, Reveal } from '../components/Motion';
 
@@ -42,16 +43,21 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
-  const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       void loadConversationLibrary()
-        .then((items) => {
+        .then(async (items) => {
           if (active) {
             const item = items.find((it) => it.id === route.params.id);
+            if (item?.isAB) {
+              const saved = await loadABSession(item.id);
+              if (active && saved) navigation.replace('ABSession', { id: saved.id, scenario: saved.scenario });
+              return;
+            }
             setConversation(item || null);
             if (!item) setError('This conversation is no longer available.');
           }
@@ -87,10 +93,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </Text>
           </View>
 
-          <GlassButton label="Audio setting" onPress={() => {}} style={styles.speakerButton}>
-            <DesignIcon name="speaker" />
-          </GlassButton>
-
           <GlassButton label="Delete conversation" onPress={() => setConfirmDelete(true)} style={styles.speakerButton}>
             <TrashIcon size={16} color="#FFAA80" />
           </GlassButton>
@@ -108,11 +110,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </MotionPressable>
               <MotionPressable
                 accessibilityRole="button"
+                disabled={deleting}
                 onPress={async () => {
+                  if (deleting) return;
+                  setDeleting(true);
                   try {
                     await deleteConversation(route.params.id);
                     navigation.goBack();
-                  } catch (_) {}
+                  } catch (err) { setError((err as Error).message || 'Could not delete this conversation. Please retry.'); }
+                  finally { setDeleting(false); }
                 }}
                 style={styles.confirmDeleteBtn}
               >
@@ -142,9 +148,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </View>
 
               {/* Rounds List */}
+              <Text style={styles.metaNotice}>Legacy transcript. Audio was not retained for this conversation.</Text>
               {conversation.rounds.map((round, idx) => {
-                const isPlayingAi = playingKey === `q-${idx}`;
-                const isPlayingCand = playingKey === `a-${idx}`;
+                const isPlayingAi = false;
+                const isPlayingCand = false;
                 const isCollapsed = collapsed[idx];
                 const estKb = Math.max(24, Math.round(18 * 3.6));
 
@@ -168,8 +175,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                           <View style={styles.attachedAudioBar}>
                             <MotionPressable
                               accessibilityRole="button"
-                              accessibilityLabel={isPlayingAi ? 'Pause' : 'Play'}
-                              onPress={() => setPlayingKey(isPlayingAi ? null : `q-${idx}`)}
+                              accessibilityLabel="Audio unavailable for this legacy transcript"
+                              disabled
                               style={styles.aiPlayButton}
                             >
                               <LinearGradient
@@ -185,7 +192,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                               <Waveform active={isPlayingAi} progress={isPlayingAi ? 0.6 : 0} />
                             </View>
 
-                            <Text style={styles.aiDurationText}>{formatTime(Math.max(4, Math.round(round.question.trim().split(/\s+/).filter(Boolean).length / 2.5)))}</Text>
+                            <Text style={styles.aiDurationText}>—</Text>
                           </View>
                         </View>
 
@@ -206,8 +213,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                         <View style={styles.candidateAudioRow}>
                           <MotionPressable
                             accessibilityRole="button"
-                            accessibilityLabel={isPlayingCand ? 'Pause' : 'Play candidate answer'}
-                            onPress={() => setPlayingKey(isPlayingCand ? null : `a-${idx}`)}
+                            accessibilityLabel="Recorded audio unavailable for this legacy transcript"
+                            disabled
                             style={styles.candidatePlayButton}
                           >
                             <DesignIcon name="play" />
@@ -216,7 +223,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                           <View style={styles.candidateWaveArea}>
                             <Waveform candidate active={isPlayingCand} progress={isPlayingCand ? 0.5 : 0} />
                             <Text style={styles.candidateSizeCaption}>
-                              {formatTime(Math.max(3, Math.round(round.answer.trim().split(/\s+/).filter(Boolean).length / 2.5)))}, {Math.max(20, Math.round(Math.max(3, Math.round(round.answer.trim().split(/\s+/).filter(Boolean).length / 2.5)) * 3.4))} KB
+                              Transcript only
                             </Text>
                           </View>
 
@@ -250,6 +257,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   </React.Fragment>
                 );
               })}
+              {!!conversation.currentQuestion && <View style={styles.feedbackCard}><Text style={styles.feedbackHeading}>Unanswered question</Text><Text style={styles.feedbackBody}>{conversation.currentQuestion}</Text></View>}
 
               {/* Completed: Coach Feedback & Practice Again CTA */}
               {conversation.status === 'completed' ? (
@@ -282,7 +290,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
                   <MotionPressable
                     accessibilityRole="button"
-                    accessibilityLabel="Continue interview"
+                    accessibilityLabel="Start this interview again"
                     onPress={() => navigation.navigate('Interview', { topic: conversation.topic })}
                     style={styles.continueButton}
                   >
@@ -292,7 +300,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                       end={{ x: 1, y: 0 }}
                       style={StyleSheet.absoluteFill}
                     />
-                    <Text style={styles.continueButtonText}>Continue</Text>
+                    <Text style={styles.continueButtonText}>Start again</Text>
                   </MotionPressable>
                 </View>
               )}

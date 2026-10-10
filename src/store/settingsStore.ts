@@ -19,6 +19,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
 };
 let previewSettings = { ...DEFAULT_SETTINGS, geminiApiKey: 'design-preview-fixture' };
+let writeQueue: Promise<void> = Promise.resolve();
+
+function enqueueWrite(action: () => Promise<void>): Promise<void> {
+  const operation = writeQueue.catch(() => {}).then(action);
+  writeQueue = operation;
+  return operation;
+}
 
 /**
  * Load settings from AsyncStorage.
@@ -46,7 +53,7 @@ export async function loadSettings(): Promise<AppSettings> {
 /**
  * Persist settings to AsyncStorage.
  */
-export async function saveSettings(settings: AppSettings): Promise<void> {
+async function writeSettings(settings: AppSettings): Promise<void> {
   if (designPreviewEnabled) { previewSettings = { ...DEFAULT_SETTINGS, ...settings }; return; }
   try {
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -56,8 +63,14 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   }
 }
 
-export async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
-  await saveSettings({ ...await loadSettings(), ...patch });
+export function saveSettings(settings: AppSettings): Promise<void> {
+  const snapshot = { ...settings };
+  return enqueueWrite(() => writeSettings(snapshot));
+}
+
+export function updateSettings(patch: Partial<AppSettings>): Promise<void> {
+  const snapshot = { ...patch };
+  return enqueueWrite(async () => writeSettings({ ...await loadSettings(), ...snapshot }));
 }
 
 /**

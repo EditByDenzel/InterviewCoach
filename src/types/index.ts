@@ -30,6 +30,7 @@ export interface InterviewRound {
 
 export interface SavedConversation {
   isSample?: boolean;
+  isAB?: boolean;
   id: string;
   topic: string;
   createdAt: string;
@@ -55,6 +56,8 @@ export type InterviewPhase =
 /** Navigation param list */
 export type RootStackParamList = {
   Home: { topic?: string } | undefined;
+  Scenario: { draft: string; photo?: boolean };
+  ABSession: { scenario: import('../domain/abSession').Scenario; id?: string };
   Interview: { topic: string };
   Summary: { rounds: InterviewRound[]; closingMessage: string; topic: string; saveWarning?: string };
   Settings: undefined;

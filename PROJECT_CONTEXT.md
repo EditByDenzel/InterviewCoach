@@ -1,108 +1,31 @@
-# InterviewCoach handoff
+# Coachie project handoff
 
-Updated: 9 October 2026.
+Updated 10 October 2026.
 
-## Working location and GitHub
+## Working location
 
-Use `C:\Users\user\Documents\antigravity\InterviewCoach` as the working folder
-for Antigravity and Codex. Open this same folder in each tool. A separate
-Coachie checkout was populated during setup; it is not needed for development.
+Develop in the original InterviewCoach checkout. GitHub repository: https://github.com/EditByDenzel/InterviewCoach, branch main tracking origin/main. The separate Coachie checkout is not the development source. Inspect status before work, preserve unrelated changes, and never copy files between checkouts to synchronize them. Commit intended files only; no force push.
 
-Repository: https://github.com/EditByDenzel/InterviewCoach
-Branch: `main`, tracking `origin/main`.
-GitHub connector identity and Git CLI repository access verified as
-`EditByDenzel`, with administrator permission. The repository is public.
+## Current product
 
-Before working: `git status --short --branch`, then `git pull --ff-only` when
-the working tree is clean. After intentional changes, run checks, commit only
-the intended files, and push. Avoid editing the same files simultaneously from
-multiple tools. Git synchronizes committed files; private chat history and
-local ignored files do not transfer through GitHub.
+Home -> Scenario review -> A/B session. Coachie is the tasker, asking another assistant for help. Phone microphone captures models playing on a computer. Both Android and iPhone are targets. Typed topics and camera/library images become an editable English review with role, goal, facts, constraints, language, time, optional minimum exchanges, search requirement and priorities.
 
-## Product and implementation
+A starts explicitly; B starts manually after a divider, with the same opener/persona/scenario and separate reasoning history. Natural adaptive follow-ups replace a fixed question count. Duration is scenario-specific, and the maximum takes precedence over optional minimum exchanges. Comparison follows both runs, uses delivered turn evidence and available original model audio, and retains a separate user vote. Missing capture is not a model failure; search and factual accuracy are not independently verified.
 
-React Native with Expo SDK 51, TypeScript, React Native Paper v5, NativeWind v4.
-Home -> Interview -> Summary. Settings opens focused Language, Voice, API Keys,
-and About pages. All screens share the orange glow, dark glass surfaces, and
-rounded controls from Coachie’s Figma design.
-The interview asks five questions, speaks them aloud, records each answer,
-transcribes it, generates follow-ups, and finishes with feedback and a shareable
-transcript. Settings and completed/in-progress conversation transcripts persist
-in AsyncStorage. Home's hamburger opens a recent-conversation sidebar; selecting
-a session opens its saved question/answer flow and feedback. Recordings remain
-temporary, and the saved viewer is read-only with a Practice again action.
+The user confirmed whole-reply transcription: record -> stop -> source transcription -> English translation -> follow-up. Thai source stays in background context while English is visible. Live captions are optional future work, not a release requirement. Thai, English and Nigerian English profiles are adult character directions requiring real auditions. A/B uses Gemini; existing interview/summary routes, settings and old history remain supported separately.
 
-Design source: https://www.figma.com/design/rizQLyexn1ZrW6HJvwdkCM/Coachie-App
-Selected frames: Home `8:24`, Voice & Chat Interview Flow `8:108`.
-Settings follows the user's grouped-row reference while reusing Coachie's palette.
-Home now uses a growing topic composer with an inline send action. Enter sends;
-Shift+Enter inserts a newline on web. The Coachie icon opens Settings. Simulated
-9:41, signal/battery icons, and the fake home indicator are removed.
-Per-card gradients remain clipped within the cards. `UI_REVIEW.md` records
-the inspected UI states and remaining verification boundaries.
+## Storage and recovery
 
-Services: `src/services/geminiService.ts`, `elevenLabsService.ts`, and
-`audioService.ts`. Screens are in `src/screens`; navigation in `src/navigation`.
+A/B metadata uses @coachie_ab_sessions_v1. Audio is durable native document files or browser IndexedDB, not base64 in AsyncStorage. Reserve asset ownership before writing; preserve pending source/audio across translation failures. Stage-specific retry must not duplicate accepted turns or re-run a completed comparison. Interrupted tasker speech is undelivered until playback completes and must not enter context. Closing saves captured replies; backgrounding pauses capture/playback until explicit resume. Saved evidence remains until user deletion, subject to local storage clearing/uninstall. No cloud backup.
 
-Configured models remain `gemini-3.8-flash` for text and transcription and
-`gemini-3.8-flash-tts` for speech. Default voice remains `Kore`; users can
-choose 30 searchable Gemini studio voices or an ElevenLabs voice ID. Thai is
-available and selects Gemini; Flash TTS supports Thai, while Flash-Lite TTS and
-the app's ElevenLabs multilingual_v2 engine do not. Interview language defaults
-to English and is included in the question/feedback prompt. Google's model catalog lists
-both model IDs at https://ai.google.dev/gemini-api/docs/models (checked during
-setup). This does not verify account access or a live interview session.
-ElevenLabs remains optional with Rachel as the default voice ID.
-Gemini TTS uses the documented Interactions REST API and default WAV output:
-https://ai.google.dev/gemini-api/docs/speech-generation (checked 9 October 2026).
+Settings and legacy transcript writes are serialized and validated; corrupt data is reported and preserved. Combined history uses conversationLibrary.ts, keeping bundled samples and real saved data distinct. Legacy sessions never acquire fabricated B results or fake playable recordings.
 
-MotionProvider handles web/native reduced-motion preferences and fine-pointer
-hover capability. Screens fade/slide in 240ms, drawers in 260ms, transcripts
-reveal in 200ms, and the topic composer grows/shrinks in 180ms. The composer
-measures the actual web textarea, including unbroken text and newlines; growth
-is capped at seven visible lines with scroll available and native scrollbar
-chrome hidden. Audio waveforms fill their available width. Playback progress
-uses expo-av position/duration callbacks; bars animate during playback and
-transcription. These are stylized bars, not extracted amplitude measurements.
-Mic halos breathe while ready/recording and stop when paused or disabled.
-Loading dots animate only while an operation is active. Loops respect reduced
-motion and stop on unmount.
+## Providers, design and verification
 
-## Run and verify
+Configured IDs remain gemini-3.8-flash and gemini-3.8-flash-tts. TTS uses Interactions audio output and separate speech_metadata.style, retaining literal selected-language text. Text/transcription use generateContent. Provider deadlines include response bodies; incomplete output is rejected. Credentials stay in ignored .env or in-app settings; public Expo variables enter bundles. Live account access was not tested.
 
-Dependencies are installed in the original folder. For a fresh checkout run
-`npm ci`. Start with `npm start`, or `npm run web` for the browser preview.
-Run `npm test -- --runInBand` and `npx tsc --noEmit` for automated checks.
+Shared design uses dark orange glass surfaces. Motion uses opacity/transform with cancellable transitions and reduced-motion/background cleanup. Composer growth is bounded; drawer focus/Escape and keyboard interaction are contained. Audio bars are stylized activity/progress visuals, not measured sound spectra.
 
-Latest checks: 15 tests across four suites passed and TypeScript reported
-no errors. Web, Android, and iOS production bundles exported without loading .env.
-Expo SDK 51 navigation dependencies were aligned after an existing
-react-native-screens/codegen mismatch. Browser checks
-covered 320px/390px layouts, composer growth/shrink and bounded long-word input,
-full-width audio bars, transcript reveal/collapse, changing mic halo transforms,
-recording/pause/transcription/replay UI, and all five rounds using fixtures.
-Saved completed/unfinished conversations reopen after reload. Thai and Puck
-preference selection is verified in the fixture. Jest emits an existing
-ts-jest isolatedModules deprecation warning.
-Real-device recording, playback, and paid/live API calls were not tested.
+Run npm ci, npm start (SDK 51-compatible client), npm run web, npm test -- --runInBand and npx tsc --noEmit. npm run preview:design serves a no-network fixture at port 8084 with simulated capture and silent WAVs. The A/B fixture has completed both runs, comparison, vote, reload/reopen, replay and deletion at 320/390 widths. Physical camera/mic, live provider quality, fluent-language auditions and OS interruptions remain unverified. Distribution/EAS is not configured.
 
-The existing ignored `.env` can seed `EXPO_PUBLIC_GEMINI_API_KEY`. Do not print
-or commit it. Expo public environment values become part of the client bundle;
-enter keys in Settings when distributing a build rather than bundling a private
-key. `.env.example` documents the variable without a credential.
-
-## Pending work and older documentation
-
-Consult `PLAN.md` for the roadmap. Known unverified areas include raw PCM/WAV
-handling for Gemini TTS, Android recording MIME type, NativeWind rendering,
-real-device audio replay and retry behavior. EAS/distribution is not configured.
-Navigation types and missing assets have already been fixed.
-`npm run preview:design` runs a development-only fixture at port 8084 with dummy
-keys and canned questions/silent audio. Its microphone capture is simulated;
-it never requests microphone access or sends paid API requests. Short artificial
-response delays expose loading states. ElevenLabs calls are blocked. The normal
-app uses the selected provider. SVG assets are bundled as exact XML for native
-offline rendering. Only three Inter font weights are loaded. Unit tests and
-environment seeding already exist, despite older unchecked roadmap entries.
-Treat historical release links and readiness claims as historical documentation.
-
+Read AB_IMPLEMENTATION_PLAN.md, AB_CONVERSATION_BRIEF.md, ARCHITECTURE.md, PLAN.md and CHANGELOG.md for current scope and check evidence. The private Live S2S reference is not publishable and its platform rules prohibit AI-authored prompts/evaluations. This independent app is not a claimed compliant Arena integration.

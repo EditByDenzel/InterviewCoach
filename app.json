@@ -15,8 +15,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.interviewcoach.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "InterviewCoach needs microphone access to record your interview answers.",
-        "NSSpeechRecognitionUsageDescription": "InterviewCoach uses speech recognition to transcribe your answers."
+        "NSMicrophoneUsageDescription": "Coachie records model replies for your A/B conversations.",
+        "NSSpeechRecognitionUsageDescription": "Coachie transcribes model replies for your conversations.",
+        "NSCameraUsageDescription": "Coachie uses your camera when you take a photo to extract a scenario."
       }
     },
     "android": {
@@ -39,6 +40,14 @@
         "expo-av",
         {
           "microphonePermission": "Allow InterviewCoach to access your microphone to record interview answers."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Coachie to read a selected screenshot to extract its scenario.",
+          "cameraPermission": "Allow Coachie to photograph a scenario for text extraction.",
+          "microphonePermission": false
         }
       ],
       "expo-font"

@@ -22,6 +22,7 @@ import { createConversationId, saveConversation } from '../store/conversationSto
 import { FadeIn, LiveDots, MotionPressable, Reveal, useMotion } from '../components/Motion';
 import { generateInterviewText, generateGeminiTTS, transcribeAudio, GeminiMessage } from '../services/geminiService';
 import { generateElevenLabsTTS } from '../services/elevenLabsService';
+import { createRecordingSession } from '../services/recordingSession';
 import {
   playBase64Audio,
   startRecording,
@@ -33,6 +34,7 @@ import {
   readAudioAsBase64,
   requestMicrophonePermission,
   subscribeAudioLevel,
+  setPlaybackMode,
 } from '../services/audioService';
 import {
   DESIGN,
@@ -90,7 +92,9 @@ function renderFormattedMessage(text: string) {
 
 export default function InterviewScreen({ navigation, route }: Props) {
   const { topic } = route.params;
-  const [phase, setPhase] = useState<InterviewPhase>('generating_question');
+  const [phase, setPhaseState] = useState<InterviewPhase>('generating_question');
+  const phaseRef = useRef<InterviewPhase>('generating_question');
+  const setPhase = (next: InterviewPhase) => { phaseRef.current = next; setPhaseState(next); };
   const [rounds, setRounds] = useState<InterviewRound[]>([]);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -112,7 +116,9 @@ export default function InterviewScreen({ navigation, route }: Props) {
     voice: 'Kore',
   });
 
-  const [paused, setPaused] = useState(false);
+  const [paused, setPausedState] = useState(false);
+  const pausedRef = useRef(false);
+  const setPaused = (next: boolean) => { pausedRef.current = next; setPausedState(next); };
   const [seconds, setSeconds] = useState(0);
   const [muted, setMuted] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -139,8 +145,14 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const completed = useRef<InterviewRound[]>([]);
   const settings = useRef<AppSettings>({ geminiApiKey: '', elevenLabsApiKey: '', ttsProvider: 'gemini' });
   const voices = useRef<Record<number, Voice>>({});
+  const voiceKeys = useRef<Record<number, string>>({});
   const recordings = useRef<Record<number, { uri: string; seconds: number }>>({});
   const candidateSound = useRef<Audio.Sound | null>(null);
+  const candidatePlaybackGeneration = useRef(0);
+  const recordingSession = useRef<ReturnType<typeof createRecordingSession> | null>(null);
+  const resumeSpeech = useRef<(() => void) | null>(null);
+  const pauseBusy = useRef(false);
+  const secondsRef = useRef(0);
 
   const questionRef = useRef('');
   const pendingUri = useRef<string | null>(null);
@@ -148,6 +160,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const log = useRef<ScrollView>(null);
 
   const stopCandidate = async () => {
+    candidatePlaybackGeneration.current++;
     const sound = candidateSound.current;
     candidateSound.current = null;
     if (sound) {
@@ -181,7 +194,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
   };
 
   const ensureActive = () => {
-    if (!alive.current) throw new Error('Session closed');
+    if (!alive.current || exiting.current) throw new Error('Session closed');
   };
 
   const perform = async (action: () => Promise<void>) => {
@@ -200,10 +213,12 @@ export default function InterviewScreen({ navigation, route }: Props) {
     }
   };
 
-  const speak = async (text: string, index: number) => {
+  const speak = async (text: string, index: number, respectSessionPause = true) => {
     ensureActive();
     setPhase('speaking');
-    let voice = voices.current[index];
+    const voiceKey = (s: AppSettings) => JSON.stringify([text, s.language || 'English', s.ttsProvider, s.geminiVoice || 'Kore', s.elevenLabsVoiceId || '']);
+    const key = voiceKey(settings.current);
+    let voice = voiceKeys.current[index] === key ? voices.current[index] : undefined;
     if (!voice) {
       const s = settings.current;
       voice =
@@ -211,11 +226,16 @@ export default function InterviewScreen({ navigation, route }: Props) {
           ? { base64: await generateElevenLabsTTS(s.elevenLabsApiKey, text, s.elevenLabsVoiceId), extension: 'mp3' }
           : { base64: await generateGeminiTTS(s.geminiApiKey, text, s.geminiVoice), extension: 'wav' };
       ensureActive();
-      voices.current[index] = voice;
+      if (voiceKey(settings.current) === key) { voices.current[index] = voice; voiceKeys.current[index] = key; }
     }
-    setPlayingKey(`q-${index}`);
-    setPlayProgress(0);
     try {
+      let repeat = false;
+      do {
+      if (respectSessionPause && pausedRef.current) await new Promise<void>(resolve => { resumeSpeech.current = resolve; });
+      ensureActive();
+      setPhase('speaking');
+      setPlayingKey(`q-${index}`);
+      setPlayProgress(0);
       await playBase64Audio(voice.base64, voice.extension, (position, duration) => {
         if (alive.current && duration) {
           durations.current[index] = Math.ceil(duration / 1000);
@@ -223,6 +243,9 @@ export default function InterviewScreen({ navigation, route }: Props) {
         }
       });
       ensureActive();
+      // Pausing stops the device sound. Resume replays this cached complete clip.
+      repeat = respectSessionPause && pausedRef.current;
+      } while (repeat);
     } finally {
       if (alive.current) {
         setPlayingKey(null);
@@ -255,30 +278,9 @@ export default function InterviewScreen({ navigation, route }: Props) {
       ensureActive();
       setPhase('idle');
       retry.current = null;
-      if (!paused && alive.current && !exiting.current) {
-        try {
-          if (await requestMicrophonePermission()) {
-            await stopCandidate();
-            await startRecording(
-              () => {
-                if (alive.current && !paused && !locked.current) {
-                  record();
-                }
-              },
-              () => {
-                if (alive.current && !paused && !locked.current) {
-                  void pause();
-                }
-              }
-            );
-            if (alive.current) {
-              setSeconds(0);
-              setPhase('recording');
-            }
-          }
-        } catch (err) {
-          console.warn('[auto-listen] Could not auto-start recording:', err);
-        }
+      if (!pausedRef.current && alive.current && !exiting.current) {
+        await stopCandidate();
+        await recordingSession.current?.start();
       }
     };
     retry.current = play;
@@ -341,7 +343,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
     const audio = await readAudioAsBase64(pendingUri.current);
     ensureActive();
     const dataUri = `data:${audio.mimeType};base64,${audio.base64}`;
-    recordings.current[completed.current.length] = { uri: dataUri, seconds };
+    recordings.current[completed.current.length] = { uri: dataUri, seconds: secondsRef.current };
     const text = await transcribeAudio(settings.current.geminiApiKey, audio.base64, audio.mimeType);
     ensureActive();
     if (!text.trim()) {
@@ -352,64 +354,38 @@ export default function InterviewScreen({ navigation, route }: Props) {
     await submit(text);
   };
 
-  const record = () =>
-    void perform(async () => {
-      if (phase === 'recording') {
-        setPhase('transcribing');
-        const uri = await stopRecording();
-        ensureActive();
-        if (!uri) {
-          retry.current = null;
-          throw new Error('Recording failed. Please record again.');
-        }
-        pendingUri.current = uri;
-        recordings.current[completed.current.length] = { uri, seconds };
-        await transcribe();
-      } else {
-        if (!(await requestMicrophonePermission()))
-          throw new Error('Microphone access is required. Allow it in your device settings or type an answer.');
-        ensureActive();
-        await startRecording(
-          () => {
-            if (alive.current && !paused && !locked.current) {
-              record();
-            }
-          },
-          () => {
-            if (alive.current && !paused && !locked.current) {
-              void pause();
-            }
-          }
-        );
-        if (!alive.current) {
-          await stopRecording();
-          return;
-        }
-        setSeconds(0);
-        setPaused(false);
-        setPhase('recording');
-      }
-    });
+  const record = () => {
+    if (locked.current || !alive.current || exiting.current) return;
+    void (async () => {
+      await stopCandidate(); await stopPlayback();
+      if (recordingSession.current?.getSnapshot().recording) await recordingSession.current.end();
+      else if (phaseRef.current === 'idle') await recordingSession.current?.start();
+    })().catch(err => { if (alive.current) setError(err instanceof Error ? err.message : 'Could not record audio.'); });
+  };
 
-  const pause = () =>
-    void perform(async () => {
-      if (paused) {
-        if (phase === 'recording') await resumeRecording();
-        setPaused(false);
-      } else {
-        if (phase === 'recording') {
-          await pauseRecording();
-        } else if (phase === 'speaking') {
-          await stopPlayback();
-          setPhase('idle');
-        }
-        setPaused(true);
+  // Pause remains available while TTS/playback holds the main operation lock.
+  const pause = async () => {
+    if (pauseBusy.current || !alive.current || exiting.current) return;
+    pauseBusy.current = true;
+    try {
+      const capture = recordingSession.current?.getSnapshot();
+      if (capture?.recording) {
+        if (capture.paused) {
+          await stopCandidate(); await stopPlayback();
+          await recordingSession.current?.resume();
+        } else await recordingSession.current?.pause();
+      } else if (phaseRef.current === 'speaking') {
+        if (pausedRef.current) {
+          setPaused(false);
+          const resume = resumeSpeech.current; resumeSpeech.current = null; resume?.();
+        } else { setPaused(true); await stopPlayback(); }
       }
-      ensureActive();
-    });
+    } catch (err) { if (alive.current) setError(err instanceof Error ? err.message : 'Could not pause audio.'); }
+    finally { pauseBusy.current = false; }
+  };
 
   const send = () => {
-    if (phase === 'recording') record();
+    if (recordingSession.current?.getSnapshot().recording) record();
     else if (answer.trim()) void perform(() => submit(answer.trim()));
   };
 
@@ -423,12 +399,8 @@ export default function InterviewScreen({ navigation, route }: Props) {
       setPlayProgress(0);
       return;
     }
-    if (phase === 'recording') {
-      try {
-        await pauseRecording();
-        setPaused(true);
-      } catch (_) {}
-    }
+    const captureWasActive = recordingSession.current?.getSnapshot().recording;
+    if (captureWasActive && !(await recordingSession.current?.prepareForReplay())) return;
     await perform(async () => {
       try {
         if (candidate) {
@@ -436,47 +408,48 @@ export default function InterviewScreen({ navigation, route }: Props) {
           await stopCandidate();
           const recording = recordings.current[index];
           if (!recording?.uri) return;
+          const generation = candidatePlaybackGeneration.current;
+          await setPlaybackMode();
+          ensureActive();
           const { sound } = await Audio.Sound.createAsync(
             { uri: recording.uri },
-            { shouldPlay: true, isMuted: muted, progressUpdateIntervalMillis: 100 }
+            { shouldPlay: false, isMuted: muted, progressUpdateIntervalMillis: 100 }
           );
+          if (!alive.current || exiting.current || generation !== candidatePlaybackGeneration.current) {
+            await sound.unloadAsync(); return;
+          }
           candidateSound.current = sound;
           setPlayingKey(`a-${index}`);
           setPlayProgress(0);
           sound.setOnPlaybackStatusUpdate((status) => {
+            if (candidateSound.current !== sound) return;
             if (status.isLoaded && alive.current && status.durationMillis) {
               setPlayProgress(Math.min(1, status.positionMillis / status.durationMillis));
             }
             if (status.isLoaded && status.didJustFinish) {
-              sound.setOnPlaybackStatusUpdate(null);
-              void sound.unloadAsync();
-              if (candidateSound.current === sound) {
-                candidateSound.current = null;
-                if (alive.current) {
-                  setPlayingKey(null);
-                  setPlayProgress(0);
-                }
-              }
+              void stopCandidate().catch(err => { if (alive.current) setError(err instanceof Error ? err.message : 'Could not release audio.'); });
             } else if (!status.isLoaded && status.error) {
-              if (candidateSound.current === sound) {
-                candidateSound.current = null;
-                if (alive.current) {
-                  setPlayingKey(null);
-                  setError('Could not replay this recording.');
-                }
-              }
+              void stopCandidate().catch(() => {});
+              if (alive.current) setError('Could not replay this recording.');
             }
           });
+          try { await sound.playAsync(); }
+          catch (err) { await stopCandidate(); throw err; }
         } else {
           await stopCandidate();
           await stopPlayback();
           const textToSpeak = index === rounds.length ? question : rounds[index]?.question;
           if (!textToSpeak) return;
-          await speak(textToSpeak, index);
-          setPhase('idle');
+          await speak(textToSpeak, index, false);
+          if (!captureWasActive) setPhase('idle');
         }
       } catch (err) {
         if (alive.current) setError(err instanceof Error ? err.message : 'Could not play audio.');
+      } finally {
+        if (alive.current && captureWasActive) {
+          const capture = recordingSession.current?.getSnapshot();
+          if (capture?.recording) { setPhase('recording'); setPaused(capture.paused); }
+        }
       }
     });
   };
@@ -494,8 +467,9 @@ export default function InterviewScreen({ navigation, route }: Props) {
   const close = async () => {
     exiting.current = true;
     alive.current = false;
+    resumeSpeech.current?.(); resumeSpeech.current = null;
     await persist();
-    await Promise.allSettled([stopPlayback(), stopRecording(), stopCandidate()]);
+    await Promise.allSettled([stopPlayback(), recordingSession.current?.dispose(), stopCandidate()]);
     navigation.popToTop();
   };
 
@@ -506,9 +480,37 @@ export default function InterviewScreen({ navigation, route }: Props) {
       ...settings.current,
       language: lang,
       geminiVoice: voiceName,
+      ...(lang === 'Thai' ? { ttsProvider: 'gemini' as const } : {}),
     };
-    await updateSettings({ language: lang, geminiVoice: voiceName });
+    voices.current = {}; voiceKeys.current = {}; durations.current = {};
+    try { await updateSettings({ language: lang, geminiVoice: voiceName, ...(lang === 'Thai' ? { ttsProvider: 'gemini' as const } : {}) }); }
+    catch (err) { if (alive.current) setError(err instanceof Error ? err.message : 'Could not save voice preferences.'); }
   };
+
+  if (!recordingSession.current) recordingSession.current = createRecordingSession({
+    requestPermission: requestMicrophonePermission,
+    start: startRecording, stop: stopRecording, pause: pauseRecording, resume: resumeRecording,
+    canAccept: () => alive.current && !exiting.current,
+    onChange: snapshot => {
+      if (!alive.current) return;
+      secondsRef.current = snapshot.elapsedSeconds;
+      setSeconds(snapshot.elapsedSeconds);
+      if (snapshot.recording) { setPhase('recording'); setPaused(snapshot.paused); }
+    },
+    onFinalized: async (uri, elapsedSeconds) => {
+      await perform(async () => {
+        ensureActive();
+        setPhase('transcribing');
+        pendingUri.current = uri;
+        secondsRef.current = elapsedSeconds;
+        recordings.current[completed.current.length] = { uri, seconds: elapsedSeconds };
+        await transcribe();
+      });
+    },
+    onError: err => {
+      if (alive.current) { setError(err.message); setPhase('idle'); }
+    },
+  });
 
   useEffect(() => {
     alive.current = true;
@@ -529,24 +531,18 @@ export default function InterviewScreen({ navigation, route }: Props) {
     });
     return () => {
       alive.current = false;
+      resumeSpeech.current?.(); resumeSpeech.current = null;
       unsub();
-      void stopPlayback();
-      void stopRecording();
-      void stopCandidate();
+      void stopPlayback().catch(() => {});
+      void recordingSession.current?.dispose();
+      void stopCandidate().catch(() => {});
     };
   }, []);
 
   useEffect(() => {
     if (phase !== 'recording' || paused) return;
     const timer = setInterval(() => {
-      setSeconds((s) => {
-        const next = s + 1;
-        // Idle silence protection: if no answer after 8 seconds, pause to conserve tokens
-        if (next >= 8 && alive.current && !locked.current) {
-          void pause();
-        }
-        return next;
-      });
+      recordingSession.current?.tick();
     }, 1000);
     return () => clearInterval(timer);
   }, [phase, paused]);

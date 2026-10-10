@@ -1,255 +1,58 @@
-# 🏗️ InterviewCoach — Architecture
+# Coachie architecture
 
-> Deep technical reference for developers and AI models continuing this project.
+Updated 10 October 2026. React Native 0.74 / Expo SDK 51 / React 18.2 / TypeScript. Component-local refs own asynchronous work; pure domain functions and serialized stores enforce durable boundaries.
 
----
+## Navigation and domain
 
-## Current UI and preferences (9 October 2026)
+HomeScreen sends typed/photo input to ScenarioScreen. scenarioImagePicker.ts handles camera/library and permission/cancellation; scenarioImportService.ts extracts structured English fields, validates allowed languages/time and preserves uncertainty. The user reviews before navigation to ABSessionScreen.
 
-`CoachieDesign.tsx` supplies the responsive native frame, orange radial backdrop,
-Figma icons, voice controls, and shared tokens. `SettingsDesign.tsx` supplies
-grouped rows, headers, fields, and actions. Home, Interview, Summary, and all
-Settings subpages use this shared design. Styling uses React Native StyleSheet.
+src/domain/abSession.ts defines scenario/persona snapshots, stable turn IDs and lifecycle:
 
-Settings persist in AsyncStorage. Missing fields receive migration defaults:
-English, Gemini Kore, and the existing Rachel voice ID. Subpage saves merge only
-that page’s preferences, preserving API keys and other choices. A session takes
-a settings snapshot; changes affect the next session.
-
-The development-only design fixture replaces Gemini requests when explicitly
-enabled; it cannot run in production. It stores demo preferences in memory and
-blocks ElevenLabs requests. Normal operation uses real providers.
-
-`Motion.tsx` centralizes reduced-motion/fine-pointer preferences, press/hover
-feedback, screen/message entrance, transcript height reveals, loading dots, and
-the breathing mic halo. `TopicComposer.tsx` measures the real web textarea and
-uses native content-size events; the 180ms height transition has a bounded
-seven-line viewport. `ConversationSidebar.tsx` animates a modal drawer, with
-Escape/close handling and the background hidden from assistive technology.
-The fake device status bar and home indicator are no longer rendered.
-
-`conversationStore.ts` stores sessions at `@coachie_conversations_v1`, serializes
-read/modify/write operations, and preserves corrupt storage for recovery rather
-than overwriting it. Interview saves the settings snapshot, each question,
-each accepted answer before requesting the next question, feedback, and on exit.
-Storage failure shows a warning without blocking practice. `ConversationScreen`
-reopens text/feedback only; recorded audio remains temporary and is not persisted.
-
-Audio rows use responsive stylized bars, actual expo-av playback position and
-duration callbacks, stop/play controls, and transcript toggles. Pending recorded
-answers show animated waveform/dots during transcription. Mic breathing is
-disabled while paused, unavailable, or under reduced-motion preferences.
-The explicit development fixture simulates microphone capture and Gemini calls;
-real recording/playback APIs remain active in normal mode.
-
-Thai selects Gemini 3.8 Flash TTS. The searchable catalog includes 30 studio
-voices. The current ElevenLabs multilingual_v2 engine is unavailable for Thai.
-Gemini TTS now POSTs to `/v1beta/interactions` with `x-goog-api-key`,
-`response_format: {type:'audio'}`, a `user_input` text content block, and
-`generation_config.speech_config: [{voice:voiceName}]`. The last audio content
-in model-output steps is returned as base64 WAV. Text generation/transcription
-continue using generateContent. Source: Google's speech-generation guide,
-checked 9 October 2026. Older endpoint examples below are historical.
-
-## Stack Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     InterviewCoach                       │
-│                  React Native (Expo 51)                  │
-│                      TypeScript                          │
-├──────────────────────┬──────────────────────────────────┤
-│    UI Layer          │       Logic / Service Layer        │
-│                      │                                    │
-│  react-native-paper  │  geminiService.ts                 │
-│  (MD3 components)    │    └─ Gemini 3.8 Flash (text)     │
-│                      │    └─ Gemini 3.8 Flash TTS        │
-│  NativeWind v4       │    └─ Gemini 3.8 Flash (audio)    │
-│  (Tailwind classes)  │                                    │
-│                      │  elevenLabsService.ts             │
-│  react-native-       │    └─ ElevenLabs TTS (MP3)        │
-│  reanimated          │                                    │
-│  (animations)        │  audioService.ts                  │
-│                      │    └─ expo-av (record + play)     │
-│  @react-navigation   │    └─ expo-file-system            │
-│  (routing)           │                                    │
-│                      │  settingsStore.ts                 │
-│                      │    └─ AsyncStorage                 │
-└──────────────────────┴──────────────────────────────────┘
+```text
+ready_a -> active_a -> waiting_b -> active_b -> comparing -> completed
 ```
 
----
+startB creates a fresh run. Only delivered tasker turns enter active context. Append is idempotent for identical IDs/data; changed duplicate IDs fail. Completion uses scenario time, optional minimum finalized replies and goal resolution; maximum duration wins. Manual early end is explicit. Comparison and vote are separate.
 
-## Directory Structure (annotated)
+## Conversation and audio
 
-```
-InterviewCoach/
-│
-├── App.tsx                      # Root — GestureHandlerRootView > PaperProvider > AppNavigator
-├── app.json                     # Expo config: SDK 51, permissions, plugins, orientations
-├── package.json                 # All dependencies + scripts
-├── babel.config.js              # babel-preset-expo + nativewind/babel + reanimated/plugin
-├── tailwind.config.js           # NativeWind v4 content paths + COLORS extension
-├── tsconfig.json                # Strict TS, path aliases, nativewind types
-├── nativewind-env.d.ts          # className prop type shim for NativeWind
-├── PLAN.md                      # Product roadmap (this project's source of truth)
-├── CHANGELOG.md                 # Keep-a-Changelog format version history
-├── ARCHITECTURE.md              # This file
-│
-└── src/
-    ├── theme.ts                 # AppTheme (MD3DarkTheme extended) + COLORS raw palette
-    │
-    ├── types/
-    │   └── index.ts             # All shared TS types: TTSProvider, AppSettings,
-    │                            # InterviewRound, InterviewPhase, RootStackParamList
-    │
-    ├── navigation/
-    │   └── AppNavigator.tsx     # createStackNavigator, MD3 header options
-    │                            # Routes: Home | Interview | Summary | Settings
-    │
-    ├── store/
-    │   └── settingsStore.ts     # loadSettings() / saveSettings() → AsyncStorage
-    │                            # Key: '@interview_coach_settings'
-    │
-    ├── services/
-    │   ├── geminiService.ts     # All Gemini API calls (3 functions)
-    │   │                        # Constants: TEXT_MODEL, TTS_MODEL, TRANSCRIBE_MODEL
-    │   ├── elevenLabsService.ts # generateElevenLabsTTS() → base64 MP3
-    │   └── audioService.ts      # playBase64Audio(), startRecording(), stopRecording(),
-    │                            # readAudioAsBase64(), requestMicrophonePermission()
-    │
-    └── screens/
-        ├── HomeScreen.tsx       # Topic input, chip suggestions, How-it-works, Start btn
-        ├── InterviewScreen.tsx  # THE CORE: full 5-round loop, phase state machine,
-        │                        # animated FAB, conversation history management
-        ├── SettingsScreen.tsx   # Gemini key, ElevenLabs key, TTS toggle, save
-        └── SummaryScreen.tsx    # Q&A transcript cards, AI feedback, share, new session
+```text
+Fixed scenario + active-run history
+ -> decideNextTurn (new wording or eligible saved utterance)
+ -> persist undelivered turn
+ -> synthesize literal source wording with fixed voice/style
+ -> reserve audio ownership, persist, save audio, play
+ -> persist delivered turn
+ -> automatic/manual microphone capture
+ -> reserve ownership, persist durable model audio
+ -> transcribe source, persist source
+ -> translate English, accept stable reply, persist
+ -> choose next turn or finish run
 ```
 
----
+Whole-reply transcription is the selected flow. Original Thai is background context; displayed text is English. Live captions are optional future architecture. The normal tasker gets only its run plus fixed facts and validated context-independent tasker clips. B's saved opener avoids another dialogue/TTS request. Exact source wording, language, voice, style, model and encoding define cache identity; adaptive reuse selection still requires reasoning.
 
-## Key Design Decisions
+abConversationService.ts validates structured decisions and comparison evidence. Comparison receives both delivered histories and available ORIGINAL model recordings within a request budget. Missing recordings, translation/capture uncertainty and unverified search/factual claims are limitations. No independent fact checker is implemented.
 
-### 1. Phase State Machine (not a reducer)
-`InterviewScreen` uses a simple `useState<InterviewPhase>` string enum rather than `useReducer`. This was a deliberate simplicity choice for v1. If state transitions become complex (retries, branching), migrate to `useReducer` or XState.
+geminiService.ts provides bounded fetch/body requests, complete multipart text, truncation rejection, source transcription and Interactions WAV TTS. Style metadata never replaces literal spoken text. AudioService owns native expo-av and web MediaRecorder/Web Audio lifecycles, speech/silence detection, playback progress and temporary-file cleanup. recordingSession.ts serializes capture controls, reads current callbacks, tracks pauses and cleans late permission starts. An unconditional eight-second cutoff is removed. Silence heuristics still need acoustic device tuning.
 
-### 2. Conversation History as `useRef`
-`historyRef` is a `useRef<GeminiMessage[]>` (not `useState`) because:
-- It doesn't need to trigger re-renders
-- It needs to be read synchronously inside `runRound` without stale closure issues
-- Mutations are append-only (`appendToHistory`)
+ABSessionScreen retains failed-stage continuations, pending replies, asset ownership and playback/capture state. Replay does not append turns; pause/close/background cannot mark interrupted speech delivered. Empty or unusable unfinished recordings can be explicitly deleted for another capture. Save retries continue past mutations instead of accepting another copy or re-running the evaluator.
 
-### 3. No Global State Library
-All state lives in component-level hooks. This is appropriate for a single-screen-at-a-time app with no shared state between screens. If session history persistence or user profiles are added, introduce **Zustand** (lightweight) or **Jotai** (atomic).
+## Persistence
 
-### 4. API Keys at Runtime (not build-time)
-Keys are user-entered and stored in AsyncStorage — never in `.env` or the bundle. This is the correct approach for a personal tool. For a multi-user SaaS: move key management server-side with auth.
+- abSessionStore.ts: separate validated @coachie_ab_sessions_v1 metadata with serialized snapshots and reference-aware session deletion.
+- audioAssetStore.ts: immutable binary assets in native document files with metadata, or browser IndexedDB Blobs. No automatic eviction. Temporary captured files are released only after durable audio and session persistence.
+- conversationLibrary.ts: shared history facade projecting A/B summaries beside legacy interviews and bundled samples. A/B history opens its resumable screen.
+- conversationStore.ts/settingsStore.ts: validated serialized legacy history, sample tombstones and settings. Corrupt history is reported rather than silently discarded.
 
-### 5. TTS Audio Pipeline
-```
-Gemini TTS API
-    │ base64 WAV/PCM string
-    ▼
-FileSystem.writeAsStringAsync(cacheDir/tts_output.wav, base64, {encoding: Base64})
-    │ local URI
-    ▼
-Audio.Sound.createAsync({ uri }, { shouldPlay: true })
-    │ wait for didJustFinish
-    ▼
-sound.unloadAsync()
-```
-**Potential issue:** Gemini TTS may return raw 16-bit PCM without a WAV header. In that case expo-av will fail silently. Fix: prepend a 44-byte WAV header before writing (24kHz, 16-bit, mono — values from Gemini docs).
+Local data can be removed by uninstall/storage clearing. AsyncStorage keys are not encrypted vault storage. Images/audio/context go to configured providers for processing; no cloud backup or custom backend is implemented.
 
-### 6. Recording Audio Pipeline
-```
-Audio.setAudioModeAsync({ allowsRecordingIOS: true })
-    │
-Audio.Recording.prepareToRecordAsync(HIGH_QUALITY)
-    │
-recording.startAsync()
-    │ (user speaks)
-recording.stopAndUnloadAsync()
-    │ uri: file:///.../.../AV/recording-xxx.m4a
-    ▼
-FileSystem.readAsStringAsync(uri, {encoding: Base64})
-    │ + MIME type from extension map
-    ▼
-transcribeAudio(apiKey, base64, mimeType)  → Gemini inline audio
-```
+## UI and compatibility
 
-### 7. Navigator Type Mismatch (Known v1.0 Issue)
-`AppNavigator.tsx` uses `createStackNavigator` from `@react-navigation/stack` but screen props are typed as `NativeStackScreenProps` from `@react-navigation/native-stack`. These are compatible at runtime but produce TypeScript errors. **Fix:**
-```bash
-npx expo install @react-navigation/native-stack
-```
-Then in `AppNavigator.tsx`:
-```ts
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-const Stack = createNativeStackNavigator<RootStackParamList>();
-```
+MotionProvider tracks reduced motion, pointer capabilities and app state. Native animations cancel/retarget; web interactions use short transform/opacity easing. Drawers contain focus and restore it on close. Loops stop on pause/background/unmount. Scroll areas are bounded, composers cap growth and selected controls expose accessibility state. English transcript bubbles retain original audio replay.
 
----
+InterviewScreen/SummaryScreen preserve the prior five-round interview behavior for legacy routes, with capture/retry fixes. ElevenLabs is a legacy alternative. They do not manufacture A/B data. Navigation uses @react-navigation/stack with aligned StackScreenProps.
 
-## Environment & Dependencies
+## Verification boundary
 
-### Runtime Requirements
-- Node.js ≥ 18
-- Expo CLI (`npm install -g expo-cli` or `npx expo`)
-- Expo Go app on Android/iOS for development
-
-### Key Dependency Notes
-- `react-native-paper` v5 requires `react-native-vector-icons` OR `@expo/vector-icons`. In Expo managed workflow, `@expo/vector-icons` is pre-bundled — you may need to remove `react-native-vector-icons` and import from `@expo/vector-icons` instead.
-- `nativewind` v4 requires `babel-preset-expo` with `jsxImportSource: "nativewind"` in `babel.config.js` — already configured.
-- `react-native-reanimated` must be the **last** Babel plugin — already configured.
-
-### Babel Config
-```js
-module.exports = function (api) {
-  api.cache(true);
-  return {
-    presets: [
-      ["babel-preset-expo", { jsxImportSource: "nativewind" }],
-      "nativewind/babel",
-    ],
-    plugins: ["react-native-reanimated/plugin"],  // MUST be last
-  };
-};
-```
-
----
-
-## Gemini API Reference (Oct 2026)
-
-### Base URL
-```
-https://generativelanguage.googleapis.com/v1beta/models
-```
-
-### Model IDs (stable as of 9 Oct 2026)
-| Use | Model ID | Notes |
-|-----|----------|-------|
-| Text generation | `gemini-3.8-flash` | Latest stable Flash |
-| Text-to-speech | `gemini-3.8-flash-tts` | Studio-grade, "Kore" voice |
-| Audio transcription | `gemini-3.8-flash` | Pass audio as inlineData |
-
-### Available TTS Voices (Gemini 3.8 Flash TTS)
-`Kore` · `Aoede` · `Charon` · `Fenrir` · `Puck` · `Leda` · `Orus` · `Zephyr`  
-Currently hardcoded to `Kore`. See P1 in PLAN.md for voice picker feature.
-
----
-
-## Colour Palette
-
-| Token | Hex | Used for |
-|-------|-----|---------|
-| `background` | `#0F172A` | Screen backgrounds |
-| `surface` | `#1E293B` | Cards, surfaces |
-| `surfaceElevated` | `#263348` | Elevated cards, inputs |
-| `accent` (primary) | `#06B6D4` | Primary buttons, progress, text |
-| `accentDim` | `#0E7490` | Inverse primary, hover states |
-| `success` | `#22C55E` | Answer cards, completion |
-| `warning` | `#F59E0B` | Thinking/transcribing phase |
-| `error` | `#EF4444` | Error states |
-| `recordActive` | `#F43F5E` | FAB when recording |
-| `border` | `#334155` | Dividers, outlines |
-| `textSecondary` | `#94A3B8` | Subtitles, labels |
+Jest includes pure domain/store/provider/audio tests plus actual ABSessionScreen rendering with controlled hardware/provider adapters. tests/acceptance/ab-session.feature is a specification without executable Gherkin bindings. The design preview is development-gated, uses dummy keys/silent audio and simulated capture, and blocks real provider calls. Production exports exclude that preview flag and private environment keys. Exports prove bundling, not physical device operation. See AB_IMPLEMENTATION_PLAN.md for the outstanding equal-priority iOS/Android matrix and language auditions.
