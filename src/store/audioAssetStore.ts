@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { readAudioAsBase64 } from '../services/audioService';
 
-export interface AudioAsset { base64: string; mimeType: string }
+export interface AudioAsset { base64: string; mimeType: string; waveform?: number[] }
 export interface AudioAssetAdapter {
   read(id: string): Promise<AudioAsset | null>;
   write(id: string, asset: AudioAsset): Promise<void>;
@@ -29,7 +29,9 @@ function normalizeAsset(asset: AudioAsset): AudioAsset {
   if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64) || base64.length % 4 === 1) {
     throw new Error('Audio data is empty or is not valid base64.');
   }
-  return { base64, mimeType };
+  const waveform = asset.waveform;
+  if (waveform && (!Array.isArray(waveform) || !waveform.length || waveform.length > 128 || waveform.some(value=>!Number.isFinite(value)||value<0||value>1))) throw new Error('Audio waveform metadata is invalid.');
+  return { base64, mimeType, ...(waveform ? { waveform: [...waveform] } : {}) };
 }
 
 /** Injectable adapter keeps persistence/race tests independent of microphone hardware. */
@@ -84,7 +86,7 @@ function nativeAdapter(): AudioAssetAdapter {
     await directoryReady;
     return root;
   }
-  async function metadata(id: string): Promise<{ mimeType: string; fileName: string } | null> {
+  async function metadata(id: string): Promise<{ mimeType: string; fileName: string; waveform?: number[] } | null> {
     const path = `${await directory()}${fileKey(id)}.json`;
     if (!(await FileSystem.getInfoAsync(path)).exists) return null;
     const data = JSON.parse(await FileSystem.readAsStringAsync(path));
@@ -100,7 +102,7 @@ function nativeAdapter(): AudioAssetAdapter {
       if (!data) return null;
       const uri = `${await directory()}${data.fileName}`;
       if (!(await FileSystem.getInfoAsync(uri)).exists) throw new Error('This saved recording is missing from device storage.');
-      return { base64: await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 }), mimeType: data.mimeType };
+      return { base64: await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 }), mimeType: data.mimeType, ...(data.waveform ? {waveform:data.waveform} : {}) };
     },
     async write(id, asset) {
       const dir = await directory();
@@ -110,7 +112,7 @@ function nativeAdapter(): AudioAssetAdapter {
       try {
         await FileSystem.writeAsStringAsync(uri, asset.base64, { encoding: FileSystem.EncodingType.Base64 });
         // Publish metadata last: a failed binary write never looks like a saved asset.
-        await FileSystem.writeAsStringAsync(metaUri, JSON.stringify({ id, mimeType: asset.mimeType, fileName }));
+        await FileSystem.writeAsStringAsync(metaUri, JSON.stringify({ id, mimeType: asset.mimeType, fileName, waveform: asset.waveform }));
       } catch (_) {
         await Promise.allSettled([FileSystem.deleteAsync(uri, { idempotent: true }), FileSystem.deleteAsync(metaUri, { idempotent: true })]);
         throw new Error('The recording could not be saved permanently. Check available device storage and retry.');
@@ -162,7 +164,7 @@ function webAdapter(): AudioAssetAdapter {
   }
   return {
     async read(id) {
-      const data = await transaction('readonly', store => store.get(id)) as { blob: Blob; mimeType: string } | undefined;
+      const data = await transaction('readonly', store => store.get(id)) as { blob: Blob; mimeType: string; waveform?: number[] } | undefined;
       if (!data) return null;
       return { base64: await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -172,12 +174,12 @@ function webAdapter(): AudioAssetAdapter {
         };
         reader.onerror = () => reject(new Error('Saved recording could not be read.'));
         reader.readAsDataURL(data.blob);
-      }), mimeType: data.mimeType };
+      }), mimeType: data.mimeType, ...(data.waveform ? {waveform:data.waveform} : {}) };
     },
     async write(id, asset) {
       const binary = atob(asset.base64);
       const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-      await transaction('readwrite', store => store.add({ id, mimeType: asset.mimeType, blob: new Blob([bytes], { type: asset.mimeType }) }));
+      await transaction('readwrite', store => store.add({ id, mimeType: asset.mimeType, waveform: asset.waveform, blob: new Blob([bytes], { type: asset.mimeType }) }));
     },
     async remove(id) { await transaction('readwrite', store => store.delete(id)); },
   };

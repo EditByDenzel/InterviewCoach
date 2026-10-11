@@ -16,7 +16,7 @@ jest.mock('expo-av',()=>({Audio:{
 }}));
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import { playBase64Audio,stopPlayback,setPlaybackMuted,startRecording,pauseRecording,resumeRecording,stopRecording,subscribeAudioLevel,releaseTemporaryRecording } from '../src/services/audioService';
+import { playBase64Audio,stopPlayback,setPlaybackMuted,startRecording,pauseRecording,resumeRecording,stopRecording,subscribeAudioLevel,releaseTemporaryRecording,readAudioAsBase64 } from '../src/services/audioService';
 
 describe('Interview audio controls',()=>{
   beforeEach(()=>{jest.useFakeTimers();jest.clearAllMocks();});
@@ -27,6 +27,17 @@ describe('Interview audio controls',()=>{
     for(let i=0;i<15;i++)await Promise.resolve();
     return {playback};
   };
+  it('keeps actual metered amplitude in timeline order for compressed native recordings',async()=>{
+    await startRecording();
+    const listener=mockRecording.setOnRecordingStatusUpdate.mock.calls.find(call=>typeof call[0]==='function')?.[0];
+    listener({isRecording:true,durationMillis:0,metering:-160});
+    listener({isRecording:true,durationMillis:80,metering:-20});
+    listener({isRecording:true,durationMillis:160,metering:0});
+    const uri=await stopRecording();
+    expect((await readAudioAsBase64(uri!)).waveform).toEqual([expect.closeTo(0,6),expect.closeTo(.1,6),1]);
+    await releaseTemporaryRecording(uri!);
+    expect((await readAudioAsBase64(uri!)).waveform).toBeUndefined();
+  });
   it('cancels active playback and clears its safety timer when leaving a session',async()=>{
     const {playback}=await startPlayback();expect(jest.getTimerCount()).toBe(1);
     await stopPlayback();await playback;

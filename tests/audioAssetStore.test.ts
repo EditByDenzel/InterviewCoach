@@ -16,6 +16,14 @@ import { readAudioAsBase64 } from '../src/services/audioService';
 
 describe('Permanent recording evidence on native devices', () => {
   beforeEach(() => { mockFiles.clear(); jest.clearAllMocks(); });
+  it('preserves measured recording amplitudes with durable audio and deletes both together',async()=>{
+    const waveform=[0,.1,.8,0];
+    await saveAudioAsset('measured',{base64:'YQ==',mimeType:'audio/m4a',waveform});
+    expect((await loadAudioAsset('measured'))!.waveform).toEqual(waveform);
+    await deleteAudioAssets(['measured']);
+    expect(await loadAudioAsset('measured')).toBeNull();
+    expect(mockFiles.size).toBe(0);
+  });
   it('stores binary evidence under documentDirectory with metadata containing no base64', async () => {
     expect(await saveAudioAsset('session:turn-1', { base64: 'YQ==', mimeType: 'audio/wav' })).toBe('session:turn-1');
     expect(mockFiles.get('file:///documents/coachie-audio-v1/session%3Aturn-1.wav')).toBe('YQ==');

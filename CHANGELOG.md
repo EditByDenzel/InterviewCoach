@@ -8,6 +8,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Audio-derived chat waveforms - 2026-10-11
+
+- Replaced repeating waveform arrays and timed pulsing with amplitude envelopes
+  measured from the actual clip. Playback highlighting uses player position;
+  silence remains low instead of gaining invented speech animation.
+- PCM/float WAV parsing works without playback on native/web. Browser codecs
+  decode compressed recordings silently, one audio context at a time, closing
+  the context afterward. A/B, transcription cards and legacy audio bars use it.
+- New native compressed recordings retain timestamped 80ms metering envelopes
+  with durable audio metadata. Pause samples are excluded; cleanup removes the
+  temporary envelope after saving. Existing recordings remain compatible.
+- Unsupported/damaged audio and older native compressed clips without metering
+  show a neutral line instead of fabricated amplitudes; their audio still replays.
+- Verified 195 tests across 18 suites, TypeScript and browser silent-audio shapes.
+  Tests cover variable volume, stereo, float/PCM, corruption, browser decoder
+  cleanup, native metering order, durable envelope retention and deletion.
+  Physical phone waveform/timing checks remain unverified.
+
+
 ### Darker Figma glass and message entry - 2026-10-11
 
 - Matched footer node 8:110: 6px web blur, a feathered fade to black, and

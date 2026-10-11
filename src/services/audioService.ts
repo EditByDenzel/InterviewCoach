@@ -10,6 +10,9 @@ import { Audio, AVPlaybackStatus } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { designPreviewEnabled, designPreviewRecordingUri } from '../dev/designPreview';
+import { bucketPeaks } from './audioWaveform';
+let recordedPeaks: number[] = [];
+const captureWaveforms = new Map<string, number[]>();
 
 let activeSound: Audio.Sound | null = null;
 let finishPlayback: (() => Promise<void>) | null = null;
@@ -303,6 +306,7 @@ export async function startRecording(onSilenceDetected?: () => void, onIdleTimeo
     return;
   }
   recording.setProgressUpdateInterval(80);
+  recordedPeaks = [];
   recordingPaused = false;
   pausedMillis = 0;
   {
@@ -334,6 +338,10 @@ export async function startRecording(onSilenceDetected?: () => void, onIdleTimeo
     nativeMeterListener = (status) => {
       if (!status.isRecording || generation !== recordingGeneration) return;
       const metering = status.metering ?? -160;
+      if (!recordingPaused && Number.isFinite(status.metering)) {
+        const bin = Math.floor(status.durationMillis / 80);
+        if (bin >= 0 && bin < 100000) recordedPeaks[bin] = Math.max(recordedPeaks[bin] || 0, Math.pow(10, metering / 20));
+      }
       recordingDetector?.(Math.min(1, Math.max(0, (metering + 50) / 40)), metering > -38);
     };
     if (Platform.OS !== 'web') recording.setOnRecordingStatusUpdate(nativeMeterListener);
@@ -379,12 +387,16 @@ export async function stopRecording(): Promise<string | null> {
   recording.setOnRecordingStatusUpdate(null);
   try {
     await recording.stopAndUnloadAsync();
-    return recording.getURI() ?? null;
+    const uri = recording.getURI() ?? null;
+    if (uri && recordedPeaks.length) captureWaveforms.set(uri, bucketPeaks(Array.from(recordedPeaks, value=>value || 0)));
+    recordedPeaks = [];
+    return uri;
   } finally { broadcastAudioLevel(0); }
 }
 
 /** Release the original capture only after its durable audio and metadata were saved. */
 export async function releaseTemporaryRecording(uri: string): Promise<void> {
+  captureWaveforms.delete(uri);
   if (Platform.OS === 'web') {
     if (uri.startsWith('blob:') && typeof URL !== 'undefined') URL.revokeObjectURL(uri);
     return;
@@ -410,7 +422,7 @@ export async function releaseTemporaryRecording(uri: string): Promise<void> {
  */
 export async function readAudioAsBase64(
   uri: string,
-): Promise<{ base64: string; mimeType: string }> {
+): Promise<{ base64: string; mimeType: string; waveform?: number[] }> {
   let webMimeType = '';
   const base64 = Platform.OS === 'web' ? await new Promise<string>(async (resolve, reject) => {
     try {
@@ -441,5 +453,6 @@ export async function readAudioAsBase64(
   // Safari can record MP4 while Chromium records WebM. Blob URLs have no extension.
   const mimeType = Platform.OS === 'web' ? webMimeType || 'audio/webm' : mimeMap[ext] ?? 'audio/m4a';
 
-  return { base64, mimeType };
+  const waveform = captureWaveforms.get(uri);
+  return { base64, mimeType, ...(waveform ? {waveform} : {}) };
 }

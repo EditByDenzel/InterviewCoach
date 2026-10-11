@@ -44,13 +44,13 @@ import {
   GlassButton,
   Orb,
   HeroOrb,
-  Waveform,
   ProgressiveSpokenText,
   TranscriptionIcon,
   VoiceSettingsIcon,
 } from '../components/CoachieDesign';
 
 import { conversationStyles as styles } from '../components/conversationStyles';
+import { AudioWaveform } from '../components/AudioWaveform';
 
 type Props = StackScreenProps<RootStackParamList, 'Interview'>;
 type Voice = { base64: string; extension: 'wav' | 'mp3' };
@@ -618,7 +618,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
                 </MotionPressable>
 
                 <View style={styles.aiWaveformArea}>
-                  <Waveform active={isPlaying || (isCurrent && phase === 'speaking')} progress={isPlaying || (isCurrent && phase === 'speaking') ? playProgress : 0} />
+                  <AudioWaveform base64={voices.current[index]?.base64} active={isPlaying || (isCurrent && phase === 'speaking')} progress={isPlaying || (isCurrent && phase === 'speaking') ? playProgress : 0} />
                 </View>
 
                 {durationSec ? (
@@ -674,7 +674,7 @@ export default function InterviewScreen({ navigation, route }: Props) {
             </MotionPressable>
 
             <View style={styles.candidateWaveArea}>
-              <Waveform candidate active={isPlaying || isPending} progress={isPlaying ? playProgress : 0} />
+              <AudioWaveform uri={recordings.current[index]?.uri} candidate active={isPlaying || isPending} progress={isPlaying ? playProgress : 0} />
               <Text style={styles.candidateSizeCaption}>
                 {isPending ? 'Transcribing...' : recSeconds ? `${formatTime(recSeconds)}, ${estKb} KB` : 'Processing...'}
               </Text>

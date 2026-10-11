@@ -5,6 +5,7 @@ import { figmaSvg } from './FigmaSvg';
 import Svg, { Defs, RadialGradient, Stop, Rect, Circle, SvgXml, Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { bucketPeaks } from '../services/audioWaveform';
 import { BreathingHalo, MotionPressable, useMotion } from './Motion';
 
 export const DESIGN = {
@@ -123,38 +124,19 @@ export function GlowButton({ onPress, disabled, recording, paused, size = 68, ho
   </BreathingHalo>;
 }
 
-const AI_WAVE_HEIGHTS = [8, 14, 20, 16, 8, 20, 24, 12, 16, 20, 10, 16, 24, 12, 8, 18, 22, 14, 10, 16];
-const CANDIDATE_WAVE_HEIGHTS = [6, 12, 16, 20, 12, 16, 20, 10, 12, 16, 20, 8, 12, 12, 6, 12, 16, 8, 14, 18];
-
-export function Waveform({ candidate = false, active = false, progress = 0 }: { candidate?: boolean; active?: boolean; progress?: number }) {
-  const { reduced, foreground } = useMotion();
+export function Waveform({ candidate = false, active = false, progress = 0, peaks }: { candidate?: boolean; active?: boolean; progress?: number; peaks?: number[] | null }) {
   const [containerWidth, setContainerWidth] = useState(0);
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    pulse.setValue(0);
-    if (!active || reduced || !foreground) return;
-    const animation = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
-      Animated.timing(pulse, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false })
-    ]));
-    animation.start(); return () => animation.stop();
-  }, [active, reduced, foreground, pulse]);
-
-  const step = candidate ? 7 : 5;
-  const count = containerWidth > 0 ? Math.max(16, Math.floor(containerWidth / step)) : 34;
+  const count = containerWidth > 0 ? Math.max(1, Math.floor(containerWidth / (candidate ? 7 : 5))) : 34;
   const heights = useMemo(() => {
-    const base = candidate ? CANDIDATE_WAVE_HEIGHTS : AI_WAVE_HEIGHTS;
-    const res: number[] = [];
-    for (let i = 0; i < count; i++) {
-      res.push(base[i % base.length]);
-    }
-    return res;
-  }, [count, candidate]);
+    const values = peaks?.length ? bucketPeaks(peaks, count) : Array(count).fill(0);
+    const loudest = Math.max(.05, ...values);
+    return values.map(value => 2 + 22 * Math.sqrt(value / loudest));
+  }, [count, peaks]);
 
   return (
     <View
       testID="audio-waveform"
+      accessibilityLabel={peaks?.length ? 'Measured audio waveform' : 'Waveform unavailable'}
       accessible={false}
       onLayout={(e) => {
         const w = Math.round(e.nativeEvent.layout.width);
@@ -175,7 +157,7 @@ export function Waveform({ candidate = false, active = false, progress = 0 }: { 
       ]}
     >
       {heights.map((baseH, i) => {
-        const isPlayed = progress > 0 ? (i + 1) / count <= progress : active;
+        const isPlayed = (i + .5) / heights.length <= Math.max(0, Math.min(1, progress));
         const activeColor = '#FB923C';
         const inactiveColor = candidate ? 'rgba(251,146,60,0.45)' : '#52525B';
         const barColor = isPlayed ? activeColor : inactiveColor;
@@ -187,12 +169,6 @@ export function Waveform({ candidate = false, active = false, progress = 0 }: { 
               height: baseH,
               borderRadius: 2,
               backgroundColor: barColor,
-              transform: [{
-                scaleY: active && !reduced ? pulse.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: i % 3 === 0 ? [0.6, 1.25, 0.8] : i % 3 === 1 ? [1.1, 0.65, 1.2] : [0.8, 1.2, 0.6]
-                }) : 1
-              }]
             }}
           />
         );

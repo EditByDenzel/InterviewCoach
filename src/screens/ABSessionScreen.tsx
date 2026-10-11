@@ -14,10 +14,11 @@ import { decideNextTurn, translateToEnglish, compareRuns, DialogueDecision } fro
 import { generateGeminiTTS, transcribeAudio } from '../services/geminiService';
 import { createRecordingSession } from '../services/recordingSession';
 import { playBase64Audio, stopPlayback, setPlaybackMuted, startRecording, stopRecording, pauseRecording, resumeRecording, requestMicrophonePermission, readAudioAsBase64, releaseTemporaryRecording, subscribeAudioLevel, AudioExtension } from '../services/audioService';
-import { DesignFrame, DESIGN, GlassButton, Waveform, DesignIcon, GlowButton, Orb, HeroOrb, ProgressiveSpokenText, TranscriptionIcon, VoiceSettingsIcon } from '../components/CoachieDesign';
+import { DesignFrame, DESIGN, GlassButton, DesignIcon, GlowButton, Orb, HeroOrb, ProgressiveSpokenText, TranscriptionIcon, VoiceSettingsIcon } from '../components/CoachieDesign';
 import { conversationStyles as chat } from '../components/conversationStyles';
 import { FadeIn, LiveDots, MotionPressable, useMotion, Reveal } from '../components/Motion';
 import { useConversationRefraction } from '../components/ConversationRefraction';
+import { AudioWaveform } from '../components/AudioWaveform';
 
 type Props = StackScreenProps<RootStackParamList, 'ABSession'>;
 type Phase = 'ready' | 'thinking' | 'speaking' | 'listening' | 'paused' | 'transcribing' | 'ending' | 'waiting' | 'comparing' | 'complete' | 'error';
@@ -377,7 +378,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
             <LinearGradient colors={['#D97706', '#FB923C']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
             {playing ? smallPauseGlyph : <DesignIcon name="play"/>}
           </MotionPressable>
-          <View style={chat.aiWaveformArea}><Waveform active={playing} progress={playing ? progress : 0}/></View>
+          <View style={chat.aiWaveformArea}><AudioWaveform assetId={turn.audioAssetId} refreshKey={playing||turn.delivered} active={playing} progress={playing ? progress : 0}/></View>
           {turn.audioAssetId ? <Text style={chat.aiDurationText}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text> : <ActivityIndicator size="small" color="#FF8C38"/>}
         </View>
       </View><Text style={chat.aiMetaCaption}>{stamp(turn.createdAt)} • Gemini · {session.persona.voice}</Text></View>
@@ -385,7 +386,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     return <FadeIn key={turn.id} {...entrance} style={chat.candidateCardWrapper}><View style={chat.candidateCard}>
       {turn.audioAssetId && <View style={chat.candidateAudioRow}>
         <MotionPressable accessibilityRole="button" accessibilityLabel={`${playing ? 'Stop' : 'Play'} Model ${turn.run} turn ${index + 1}`} onPress={() => void replay(turn)} style={chat.candidatePlayButton}>{playing ? smallPauseGlyph : <DesignIcon name="play"/>}</MotionPressable>
-        <View style={chat.candidateWaveArea}><Waveform candidate active={playing} progress={playing ? progress : 0}/><Text style={chat.candidateSizeCaption}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text></View>
+        <View style={chat.candidateWaveArea}><AudioWaveform assetId={turn.audioAssetId} candidate active={playing} progress={playing ? progress : 0}/><Text style={chat.candidateSizeCaption}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text></View>
         <MotionPressable accessibilityRole="button" accessibilityLabel={collapsed[turn.id] ? 'Expand transcript' : 'Collapse transcript'} onPress={() => setCollapsed(c => ({...c,[turn.id]:!c[turn.id]}))} style={chat.collapseButton}><TranscriptionIcon open={!collapsed[turn.id]}/></MotionPressable>
       </View>}
       <Reveal open={!collapsed[turn.id]}><View style={chat.candidateTranscript}><Text selectable style={chat.candidateText}>{turn.englishText}</Text><View style={chat.candidateMetaRow}><Text style={chat.candidateTimestamp}>{stamp(turn.createdAt)}</Text><DesignIcon name="check"/></View></View></Reveal>
@@ -437,7 +438,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
         {!loaded || (phase === 'thinking' && !currentTurn) ? <View style={chat.draftingRow}><Orb size={28}/><View style={chat.draftingPill}><Text style={chat.draftingText}>Aira is drafting the question...</Text><LiveDots active/></View></View> : null}
         {!['ready_a','active_a'].includes(session.status) && <View style={styles.divider}><View style={styles.line}/><Text style={styles.meta}>Model B</Text><View style={styles.line}/></View>}
         {session.turns.filter(t => t.run === 'B').map(renderTurn)}
-        {phase === 'transcribing' && <View style={chat.candidateCardWrapper}><View style={chat.candidateCard}><View style={chat.candidateAudioRow}><View style={chat.candidateWaveArea}><Waveform candidate active/><Text style={chat.candidateSizeCaption}>Transcribing…</Text></View></View></View></View>}
+        {phase === 'transcribing' && <View style={chat.candidateCardWrapper}><View style={chat.candidateCard}><View style={chat.candidateAudioRow}><View style={chat.candidateWaveArea}><AudioWaveform assetId={session.pendingReply?.audioAssetId} candidate/><Text style={chat.candidateSizeCaption}>Transcribing…</Text></View></View></View></View>}
       {session.comparison && <View style={styles.card}><Text style={styles.title}>Suggested: {session.comparison.recommendation.replace('_', ' ')}</Text><Text style={styles.body}>{session.comparison.summary}</Text><Text style={styles.body}>A: {session.comparison.outcomes.A}{'\n'}B: {session.comparison.outcomes.B}</Text>{session.comparison.findings.map((f, i) => <View key={i} style={styles.finding}><Text style={styles.cardTitle}>{f.dimension}</Text><Text style={styles.body}>{f.detail}</Text><Text style={styles.meta}>Evidence: {f.turnIds.map(turnId => { const t = session.turns.find(t => t.id === turnId); return t ? `Model ${t.run} · turn ${session.turns.filter(t2 => t2.run === t.run).findIndex(t2 => t2.id === turnId) + 1}` : ''; }).join(', ')}</Text></View>)}{session.comparison.limitations.map((l, i) => <Text key={i} style={styles.meta}>{l}</Text>)}<Text style={styles.cardTitle}>Your final choice</Text><View style={styles.voteRow}>{(['A', 'B', 'tie', 'insufficient_evidence'] as ABVote[]).map(v => <GlassButton key={v} label={`Choose ${v}`} accessibilityState={{ selected: session.vote === v }} onPress={() => void operate(async () => { update(setVote(state.current, v)); await persist(); })} style={[styles.vote, session.vote === v && styles.selected]}><Text style={styles.buttonText}>{v === 'insufficient_evidence' ? 'Unsure' : v}</Text></GlassButton>)}</View><GlassButton label="Share comparison and English transcript" onPress={() => void Share.share({ message: `${session.scenario.title}\n\n${session.turns.map(t => `${t.run} ${t.speaker}: ${t.englishText}`).join('\n\n')}\n\n${session.comparison!.summary}\nUser vote: ${session.vote || 'not selected'}` })} style={styles.choice}><Text style={styles.buttonText}>Share transcript</Text></GlassButton></View>}
       </ScrollView>
       <View onLayout={event=>setFooterHeight(event.nativeEvent.layout.height)} style={[chat.anchoredSpeakerFooter,{position:'absolute',bottom:0,left:0,right:0,zIndex:10,backgroundColor:'transparent',paddingTop:24,paddingHorizontal:24,paddingBottom:24}]}>
