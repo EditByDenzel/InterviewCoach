@@ -17,6 +17,7 @@ import { playBase64Audio, stopPlayback, setPlaybackMuted, startRecording, stopRe
 import { DesignFrame, DESIGN, GlassButton, Waveform, DesignIcon, GlowButton, Orb, HeroOrb, ProgressiveSpokenText, TranscriptionIcon, VoiceSettingsIcon } from '../components/CoachieDesign';
 import { conversationStyles as chat } from '../components/conversationStyles';
 import { FadeIn, LiveDots, MotionPressable, useMotion, Reveal } from '../components/Motion';
+import { useConversationRefraction } from '../components/ConversationRefraction';
 
 type Props = StackScreenProps<RootStackParamList, 'ABSession'>;
 type Phase = 'ready' | 'thinking' | 'speaking' | 'listening' | 'paused' | 'transcribing' | 'ending' | 'waiting' | 'comparing' | 'complete' | 'error';
@@ -41,6 +42,11 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const [muted, setMuted] = useState(false), [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [footerHeight, setFooterHeight] = useState(180);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [inputHeight, setInputHeight] = useState(56);
+  const [inputFocused, setInputFocused] = useState(false);
+  const restoredTurns = useRef(new Set<string>());
+  const glass = useConversationRefraction(viewport.width, viewport.height, footerHeight);
   const setupAbort = useRef(new AbortController());
   const state = useRef(session), alive = useRef(true), exiting = useRef(false), busy = useRef(false), pausedRef = useRef(false), phaseRef = useRef<Phase>('ready');
   const automatic = useRef(true), settings = useRef<AppSettings | null>(null), finishRequested = useRef(false), retry = useRef<(() => Promise<void>) | null>(null);
@@ -156,7 +162,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const acceptReply = async (sourceText: string, englishText: string, replyId: string, audioAssetId?: string) => {
     ensureActive();
     update(appendTurn(state.current, { id: replyId, run: state.current.activeRun, speaker: 'model', sourceText, englishText, audioAssetId, createdAt: new Date().toISOString() }));
-    update({ ...state.current, pendingReply: undefined }); setDraft(''); setPaused(false); pausedRef.current = false;
+    update({ ...state.current, pendingReply: undefined }); setDraft(''); setInputHeight(56); setInputFocused(false); setPaused(false); pausedRef.current = false;
     await persistThen(next);
   };
   const finalizePending = async () => {
@@ -297,7 +303,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
         const saved = route.params.id ? await loadABSession(route.params.id) : null;
         ensureActive();
         if (route.params.id && !saved) throw new Error('This A/B session is no longer available.');
-        if (saved) { update(saved); showPhase(saved.status === 'completed' ? 'complete' : saved.status === 'waiting_b' ? 'waiting' : 'ready'); }
+        if (saved) { restoredTurns.current = new Set(saved.turns.map(turn => turn.id)); update(saved); showPhase(saved.status === 'completed' ? 'complete' : saved.status === 'waiting_b' ? 'waiting' : 'ready'); }
         else {
           showPhase('thinking');
           const scenario = route.params.scenario || await prepareConversation({ text: route.params.topic, image: route.params.image }, settings.current, setupAbort.current.signal);
@@ -335,6 +341,8 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     return () => clearInterval(timer);
   }, []);
   useEffect(() => { const timer = setTimeout(() => log.current?.scrollToEnd({ animated: !reduced }), 80); return () => clearTimeout(timer); }, [session.turns.length, phase, reduced]);
+  // Do not replay entry animations when switching back from Voice Mode.
+  useEffect(() => { if (loaded) session.turns.forEach(turn=>restoredTurns.current.add(turn.id)); }, [loaded,session.turns.length]);
 
   const ongoing = ['active_a', 'active_b'].includes(session.status);
   const canStart = loaded && !ongoing && session.status !== 'completed';
@@ -359,7 +367,8 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const smallPauseGlyph = <View style={chat.miniPauseBars}><View style={chat.miniPauseBar}/><View style={chat.miniPauseBar}/></View>;
   const renderTurn = (turn: ABTurn, index: number) => {
     const playing = playingId === turn.id;
-    if (turn.speaker === 'tasker') return <FadeIn key={turn.id} style={chat.aiMessageGroup}>
+    const entrance = { animate: loaded && !restoredTurns.current.has(turn.id), distance: footerHeight + 64, duration: 280 };
+    if (turn.speaker === 'tasker') return <FadeIn key={turn.id} {...entrance} style={chat.aiMessageGroup}>
       <View style={chat.draftingRow}><Orb size={28}/><View style={chat.draftingPill}><Text style={chat.draftingText}>{turn.action || (index === 0 ? 'Asked an opening question' : 'Asked a follow-up')}</Text></View></View>
       <View style={chat.aiBubbleWrapper}><View style={chat.aiBubbleContainer}>
         <View style={chat.aiQuestionContent}><Text selectable style={chat.messageText}>{turn.englishText}</Text></View>
@@ -373,7 +382,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
         </View>
       </View><Text style={chat.aiMetaCaption}>{stamp(turn.createdAt)} • Gemini · {session.persona.voice}</Text></View>
     </FadeIn>;
-    return <FadeIn key={turn.id} style={chat.candidateCardWrapper}><View style={chat.candidateCard}>
+    return <FadeIn key={turn.id} {...entrance} style={chat.candidateCardWrapper}><View style={chat.candidateCard}>
       {turn.audioAssetId && <View style={chat.candidateAudioRow}>
         <MotionPressable accessibilityRole="button" accessibilityLabel={`${playing ? 'Stop' : 'Play'} Model ${turn.run} turn ${index + 1}`} onPress={() => void replay(turn)} style={chat.candidatePlayButton}>{playing ? smallPauseGlyph : <DesignIcon name="play"/>}</MotionPressable>
         <View style={chat.candidateWaveArea}><Waveform candidate active={playing} progress={playing ? progress : 0}/><Text style={chat.candidateSizeCaption}>{turn.audioDurationSeconds ? time(turn.audioDurationSeconds) : 'Audio'}</Text></View>
@@ -384,7 +393,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const controls = <View style={chat.actionControlsRow}>
     <GlassButton label={paused ? 'Resume conversation' : 'Pause conversation'} onPress={() => void togglePause()} disabled={!ongoing} style={chat.sideCircleButton}>{paused ? <DesignIcon name="play"/> : pauseGlyph}</GlassButton>
-    <GlowButton label={recording ? 'Finish model reply' : 'Start microphone capture'} onPress={record} disabled={!canRecord} recording={recording} paused={paused} level={recording && !paused ? level : 0}/>
+    <GlowButton compactHalo label={recording ? 'Finish model reply' : 'Start microphone capture'} onPress={record} disabled={!canRecord} recording={recording} paused={paused} level={recording && !paused ? level : 0}/>
     <GlassButton label="Voice & language settings" onPress={() => setQuickSettingsOpen(true)} style={chat.sideCircleButton}><VoiceSettingsIcon size={18} color="#FFF"/></GlassButton>
   </View>;
   const recovery = !!(error || saveWarning);
@@ -401,8 +410,8 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       </View>}
     </View> : canStart ? <GlassButton label={session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start Model A'} onPress={() => void operate(begin)} style={chat.closePill}><Text style={chat.closeLabel}>{session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start conversation'}</Text></GlassButton>
     : ongoing && phase === 'ready' ? <GlassButton label="Resume saved run" onPress={() => void operate(begin)} style={chat.closePill}><Text style={chat.closeLabel}>Resume conversation</Text></GlassButton>
-    : ongoing && !recording && !['thinking','speaking','transcribing','comparing','ending'].includes(phase) ? <View style={chat.spokenInputRow}>
-      <TextInput accessibilityLabel="Type model reply in selected speaking language" value={draft} onChangeText={setDraft} onSubmitEditing={submitTyped} returnKeyType="send" placeholder="Type a reply or tap mic to speak." placeholderTextColor="#A1A1AA" style={chat.spokenQueryInput}/>
+    : ongoing && !recording && !['thinking','speaking','transcribing','comparing','ending'].includes(phase) ? <View style={[chat.spokenInputRow,inputFocused&&{borderColor:'#FFB083'}]}>
+      <TextInput accessibilityLabel="Type model reply in selected speaking language" value={draft} onChangeText={value=>{setDraft(value);if(!value)setInputHeight(56);}} onSubmitEditing={submitTyped} onFocus={()=>setInputFocused(true)} onBlur={()=>setInputFocused(false)} returnKeyType="send" multiline blurOnSubmit onContentSizeChange={event=>setInputHeight(Math.min(110, Math.max(56, event.nativeEvent.contentSize.height)))} placeholder="Type a reply or tap mic to speak." placeholderTextColor="#A1A1AA" style={[chat.spokenQueryInput,{height:inputHeight},Platform.OS==='web'&&({outlineStyle:'none',scrollbarWidth:'none'} as any)]}/>
       {!!draft.trim() && <MotionPressable accessibilityRole="button" accessibilityLabel="Submit typed model reply" onPress={submitTyped} style={chat.inlineSendAction}><DesignIcon name="send"/></MotionPressable>}
     </View> : ongoing ? <Text numberOfLines={2} style={chat.spokenFooterCaption}>{paused ? 'Tap resume to continue speaking.' : phase === 'speaking' ? 'Listen to the question above.' : recording ? 'Aira is listening to the model…' : 'Preparing next response…'}</Text> : null}
     {ongoing && controls}
@@ -419,8 +428,9 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     {viewMode === 'voice' ? <View style={chat.voiceScreenContainer}>
       <View style={chat.voiceCenterHero}><HeroOrb size={180}/><Text style={chat.voiceListeningStatus}>{paused ? 'Paused' : labels[phase]}</Text><ProgressiveSpokenText text={currentTurn?.englishText || ''} progress={progress} active={phase === 'speaking'} style={chat.voiceSpokenHeading}/></View>
       <View style={chat.voiceFooterControls}>{footerContent}</View>
-    </View> : <KeyboardAvoidingView style={chat.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><View style={chat.chatContainer}>
-      <ScrollView ref={log} style={chat.chatScrollView} showsVerticalScrollIndicator={false} contentContainerStyle={[chat.chatScrollContent,{paddingBottom:footerHeight+24}]} keyboardShouldPersistTaps="handled" onContentSizeChange={() => log.current?.scrollToEnd({animated:!reduced})}>
+    </View> : <KeyboardAvoidingView style={chat.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><View onLayout={event=>setViewport({width:event.nativeEvent.layout.width,height:event.nativeEvent.layout.height})} style={chat.chatContainer}>
+      {glass.definition}
+      <ScrollView ref={log} style={[chat.chatScrollView,glass.filter]} showsVerticalScrollIndicator={false} contentContainerStyle={[chat.chatScrollContent,{paddingBottom:footerHeight+64}]} keyboardShouldPersistTaps="handled" onContentSizeChange={() => log.current?.scrollToEnd({animated:false})}>
         <View style={chat.topicRow}><LinearGradient colors={['#FF6F26','#FF500B','#DE3400']} style={chat.topicBubble}><Text style={chat.topicText}>{topic}</Text></LinearGradient><Text style={chat.topicTimestamp}>{stamp(session.createdAt)}</Text></View>
         <View style={styles.divider}><View style={styles.line}/><Text style={styles.meta}>Model A</Text><View style={styles.line}/></View>
         {session.turns.filter(t => t.run === 'A').map(renderTurn)}
@@ -430,9 +440,9 @@ export default function ABSessionScreen({ navigation, route }: Props) {
         {phase === 'transcribing' && <View style={chat.candidateCardWrapper}><View style={chat.candidateCard}><View style={chat.candidateAudioRow}><View style={chat.candidateWaveArea}><Waveform candidate active/><Text style={chat.candidateSizeCaption}>Transcribing…</Text></View></View></View></View>}
       {session.comparison && <View style={styles.card}><Text style={styles.title}>Suggested: {session.comparison.recommendation.replace('_', ' ')}</Text><Text style={styles.body}>{session.comparison.summary}</Text><Text style={styles.body}>A: {session.comparison.outcomes.A}{'\n'}B: {session.comparison.outcomes.B}</Text>{session.comparison.findings.map((f, i) => <View key={i} style={styles.finding}><Text style={styles.cardTitle}>{f.dimension}</Text><Text style={styles.body}>{f.detail}</Text><Text style={styles.meta}>Evidence: {f.turnIds.map(turnId => { const t = session.turns.find(t => t.id === turnId); return t ? `Model ${t.run} · turn ${session.turns.filter(t2 => t2.run === t.run).findIndex(t2 => t2.id === turnId) + 1}` : ''; }).join(', ')}</Text></View>)}{session.comparison.limitations.map((l, i) => <Text key={i} style={styles.meta}>{l}</Text>)}<Text style={styles.cardTitle}>Your final choice</Text><View style={styles.voteRow}>{(['A', 'B', 'tie', 'insufficient_evidence'] as ABVote[]).map(v => <GlassButton key={v} label={`Choose ${v}`} accessibilityState={{ selected: session.vote === v }} onPress={() => void operate(async () => { update(setVote(state.current, v)); await persist(); })} style={[styles.vote, session.vote === v && styles.selected]}><Text style={styles.buttonText}>{v === 'insufficient_evidence' ? 'Unsure' : v}</Text></GlassButton>)}</View><GlassButton label="Share comparison and English transcript" onPress={() => void Share.share({ message: `${session.scenario.title}\n\n${session.turns.map(t => `${t.run} ${t.speaker}: ${t.englishText}`).join('\n\n')}\n\n${session.comparison!.summary}\nUser vote: ${session.vote || 'not selected'}` })} style={styles.choice}><Text style={styles.buttonText}>Share transcript</Text></GlassButton></View>}
       </ScrollView>
-      <View onLayout={event=>setFooterHeight(event.nativeEvent.layout.height)} style={[chat.anchoredSpeakerFooter,{position:'absolute',bottom:0,left:0,right:0,zIndex:10,backgroundColor:'transparent'}]}>
-        {Platform.OS==='web' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill,{top:-32},({backdropFilter:'blur(6px) saturate(1.35)',WebkitBackdropFilter:'blur(6px) saturate(1.35)',maskImage:'linear-gradient(to bottom, transparent, black 35%)',WebkitMaskImage:'linear-gradient(to bottom, transparent, black 35%)'} as any)]}/> : <BlurView pointerEvents="none" intensity={12} tint="default" style={StyleSheet.absoluteFill}/>}
-        <LinearGradient pointerEvents="none" colors={['transparent','rgba(255,255,255,.025)','rgba(255,255,255,.05)','rgba(255,255,255,.025)']} locations={[0,.25,.7,1]} style={[StyleSheet.absoluteFill,{top:-32}]}/>
+      <View onLayout={event=>setFooterHeight(event.nativeEvent.layout.height)} style={[chat.anchoredSpeakerFooter,{position:'absolute',bottom:0,left:0,right:0,zIndex:10,backgroundColor:'transparent',paddingTop:24,paddingHorizontal:24,paddingBottom:24}]}>
+        {Platform.OS==='web' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill,{top:-48},({backdropFilter:'blur(6px) saturate(1.15)',WebkitBackdropFilter:'blur(6px) saturate(1.15)',maskImage:'linear-gradient(to bottom, transparent, black 35%)',WebkitMaskImage:'linear-gradient(to bottom, transparent, black 35%)'} as any)]}/> : <BlurView pointerEvents="none" intensity={18} tint="dark" style={StyleSheet.absoluteFill}/>}
+        <LinearGradient pointerEvents="none" colors={['transparent','rgba(7,5,4,.65)','rgba(7,5,4,.95)','#000']} locations={[0,.3,.65,1]} style={[StyleSheet.absoluteFill,{top:-48}]}/>
         <View style={chat.footerInner}>{footerContent}</View>
       </View>
     </View></KeyboardAvoidingView>}

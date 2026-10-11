@@ -112,9 +112,9 @@ export function HeroOrb({ size = 176 }: { size?: number }) {
   </View>;
 }
 
-export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false, level = 0, label }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?: boolean; size?: number; home?: boolean; level?: number; label?: string }) {
-  const haloSize = size + 24;
-  return <BreathingHalo size={haloSize} active={!disabled && !paused} recording={recording} level={level}>
+export function GlowButton({ onPress, disabled, recording, paused, size = 68, home = false, level = 0, label, compactHalo = false }: { onPress: () => void; disabled?: boolean; recording?: boolean; paused?: boolean; size?: number; home?: boolean; level?: number; label?: string; compactHalo?: boolean }) {
+  const haloSize = size + (compactHalo ? 8 : 24);
+  return <BreathingHalo size={haloSize} strength={compactHalo ? .25 : 1} active={!disabled && !paused} recording={recording} level={level}>
     <MotionPressable accessibilityRole="button" accessibilityLabel={label || (home ? 'Start interview' : recording ? 'Stop recording and submit answer' : 'Record answer')} disabled={disabled} onPress={onPress} style={[{ width: size, height: size, borderRadius: size / 2 }, !home && styles.glow]}>
       <LinearGradient colors={['#E03A00', '#FF621E', '#FFA742']} start={{ x: 0, y: 1 }} end={{ x: 0, y: 0 }} style={[styles.glowInner, { borderRadius: size / 2 }]}>
         <DesignIcon name={home ? 'homeMic' : 'mic'} />

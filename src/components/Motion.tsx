@@ -86,11 +86,13 @@ export function MotionPressable({ children, style, lift = false, disabled, onPre
   </AnimatedPressable>;
 }
 
-export function FadeIn({ children, style }: PropsWithChildren<{style?:StyleProp<ViewStyle>}>) {
+export function FadeIn({ children, style, distance = 8, animate = true, duration = 220 }: PropsWithChildren<{style?:StyleProp<ViewStyle>;distance?:number;animate?:boolean;duration?:number}>) {
   const {reduced}=useMotion();
-  const progress=useRef(new Animated.Value(reduced?1:0)).current;
-  useEffect(()=>{const animation=Animated.timing(progress,{toValue:1,duration:reduced?0:220,easing:easeOut,useNativeDriver:Platform.OS!=='web'});animation.start();return()=>animation.stop();},[progress,reduced]);
-  return <Animated.View style={[style,{opacity:progress,transform:[{translateY:reduced?0:progress.interpolate({inputRange:[0,1],outputRange:[8,0]})}]}]}>{children}</Animated.View>;
+  // Entry is decided once per mount; metadata updates must not cancel it.
+  const entering=useRef(animate).current;
+  const progress=useRef(new Animated.Value(reduced||!entering?1:0)).current;
+  useEffect(()=>{const animation=Animated.timing(progress,{toValue:1,duration:reduced||!entering?0:duration,easing:easeOut,useNativeDriver:Platform.OS!=='web'});animation.start();return()=>animation.stop();},[progress,reduced,entering,duration]);
+  return <Animated.View style={[style,{opacity:progress,transform:[{translateY:reduced||!entering?0:progress.interpolate({inputRange:[0,1],outputRange:[distance,0]})}]}]}>{children}</Animated.View>;
 }
 
 export function LiveDots({active}:{active:boolean}) {
@@ -110,8 +112,9 @@ export function BreathingHalo({
   active,
   recording,
   level = 0,
+  strength = 1,
   children,
-}: PropsWithChildren<{ size: number; active: boolean; recording?: boolean; level?: number }>) {
+}: PropsWithChildren<{ size: number; active: boolean; recording?: boolean; level?: number; strength?: number }>) {
   const { reduced, foreground } = useMotion();
   const breath = useRef(new Animated.Value(0)).current;
   const audioAnim = useRef(new Animated.Value(0)).current;
@@ -154,8 +157,8 @@ export function BreathingHalo({
   }, [active, level, recording, reduced, foreground, audioAnim]);
 
   const haloScale = Animated.add(
-    breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] }),
-    audioAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] })
+    breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1 + .15 * strength] }),
+    audioAnim.interpolate({ inputRange: [0, 1], outputRange: [0, .35 * strength] })
   );
 
   const haloOpacity = Animated.add(

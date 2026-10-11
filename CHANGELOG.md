@@ -8,6 +8,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Darker Figma glass and message entry - 2026-10-11
+
+- Matched footer node 8:110: 6px web blur, a feathered fade to black, and
+  24px side/bottom padding. Retained the existing mic and preferences controls.
+- Added a spatial SVG displacement map to the bounded web chat viewport.
+  Actual message pixels bend only at the footer edge; the map is regenerated
+  on layout changes, not scrolling/audio frames. Native retains dark Expo blur.
+- New turns rise through the glass in 280ms, then settle above its fade.
+  Restored history stays still; reduced motion skips the entry animation.
+  Measured footer height plus edge clearance keeps settled replies readable.
+- Footer input wraps with 18px side/14px vertical padding and bounded height.
+  Rounded focus highlight replaces the square browser textarea outline.
+- Reduced the A/B mic halo footprint and amplitude while retaining the 68px
+  touch target and gradient. Other screens keep their existing halo behavior.
+- Verified 185 tests across 17 suites, TypeScript and whitespace checks.
+  Browser checks confirmed wrapped text fits, controls work, new-turn motion
+  passes through the footer and settles 64px above it. Web refraction is
+  viewport-bounded. Physical iOS/Android glass appearance remains unverified.
+
+
+
 ### See-through conversation footer - 2026-10-11
 
 - Changed the A/B chat footer from a separate layout row into a transparent
