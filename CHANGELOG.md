@@ -8,6 +8,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### See-through conversation footer - 2026-10-11
+
+- Changed the A/B chat footer from a separate layout row into a transparent
+  overlay, so real chat cards can scroll behind it. Measure footer height and
+  reserve matching scroll padding so the final reply clears all controls.
+- Removed the heavy dark wash. Web uses clear 6px backdrop blur, saturation,
+  a feathered mask and faint white highlights; native uses low-intensity blur.
+  Existing microphone, pause, preferences, recovery and resume actions remain.
+- Inspired by https://aave.com/design/building-glass-for-the-web. This is a
+  lightweight translucent treatment, not a reproduction of Aave's SVG
+  displacement/refraction engine. Browsers without backdrop blur retain the
+  transparent highlight and existing legible control surfaces.
+- Verified 185 tests across 17 suites, TypeScript and whitespace checks. Browser
+  inspection confirmed an absolute transparent footer and real messages visible
+  through it while scrolling. Native glass appearance remains unverified.
+
+
 ### Concurrent response preparation and chat labels - 2026-10-11
 
 - Prepare the next turn directly from the completed recording while source
