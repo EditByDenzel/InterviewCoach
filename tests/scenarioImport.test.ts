@@ -30,6 +30,13 @@ describe('Scenario review extraction', () => {
     expect(validateScenarioImport({ ...valid(), minTurns: 15 }).minTurns).toBe(15);
     expect(validateScenarioImport({ ...valid(), minTurns: null }).minTurns).toBeUndefined();
   });
+  it('keeps skills separate from ordered priorities without inventing omitted skills', () => {
+    const scenario = validateScenarioImport({ ...valid(), skillsTested:['Factual accuracy', 'Clarifying ambiguous needs'], evaluationPriorities:['Utility', 'Naturalness', 'Audio'] });
+    expect(scenario.skillsTested).toEqual(['Factual accuracy', 'Clarifying ambiguous needs']);
+    expect(scenario.evaluationPriorities).toEqual(['Utility', 'Naturalness', 'Audio']);
+    expect(validateScenarioImport(valid()).skillsTested).toBeUndefined();
+    expect(() => validateScenarioImport({ ...valid(), skillsTested:[null] })).toThrow();
+  });
   it('preserves the scenario-specific ordered priorities and distinguishes unknown search from false', () => {
     const priorities = ['Naturalness and engagement', 'Audio quality', 'Utility'];
     const scenario = validateScenarioImport({ ...valid(), evaluationPriorities: priorities, searchRequired: true });

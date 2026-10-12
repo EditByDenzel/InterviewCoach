@@ -45,7 +45,7 @@ ABSessionScreen retains failed-stage continuations, pending replies, asset owner
 - conversationLibrary.ts: shared history facade projecting A/B summaries beside legacy interviews and bundled samples. A/B history opens its resumable screen.
 - conversationStore.ts/settingsStore.ts: validated serialized legacy history, sample tombstones and settings. Corrupt history is reported rather than silently discarded.
 
-Local data can be removed by uninstall/storage clearing. AsyncStorage keys are not encrypted vault storage. Images/audio/context go to configured providers for processing; no cloud backup or custom backend is implemented.
+Local data can be removed by uninstall/storage clearing. AsyncStorage keys are not encrypted vault storage. Images/audio/context go to configured providers for processing; no cloud backup is implemented. Custom Onyi/Chidera speech uses the optional Node backend described in backend/README.md. Initialization uses persistent Google profiles (store: true, documented one-year retention); voice IDs live in its ignored private directory and the app stores voice names. Stateful availability is checked by Google because usage can extend expiry. Legacy seven-day keys remain readable during migration. Existing Gemini speech callers route custom names to the backend and keep existing WAV playback/storage. Studio voices still use the existing direct path.
 
 ## UI and compatibility
 
@@ -64,3 +64,11 @@ Completed-reply response preparation now runs from the original audio alongside 
 The A/B footer overlays the bounded scroll viewport with the dark Figma 8:110 fade, 24px padding and measured height plus 64px scroll clearance. New turns animate upward through its 6px blurred edge for 280ms; restored turns and reduced-motion entries stay still. Web applies an SVG feDisplacementMap to the real viewport content, using a canvas-generated neutral map outside the 96px lens edge. The map changes only with viewport/footer size; native uses dark Expo blur. No transcript clone or per-frame canvas redraw is used. If map generation is unavailable, the dark blurred footer remains. The padded multiline input caps its height at 110px. A/B uses a compact, restrained mic halo; legacy/Home behavior is preserved.
 
 AudioWaveform loads immutable clip evidence and renders a bounded amplitude envelope through the shared Waveform component. audioWaveform.ts parses PCM/float WAV bytes on both platforms; browser compressed formats use serial decodeAudioData with context cleanup. audioService captures native metering at 80ms timeline offsets, excludes pause updates and hands the envelope to durable AudioAsset metadata. The original recording is retained unchanged. Wave heights never pulse decoratively; played color follows the real position/duration callback. Unknown/unsupported waveforms are flat, including old native compressed files without envelope metadata. No waveform provider requests are made.
+
+## Capture recovery and background telemetry
+
+ABSession.captureIssues owns no-speech recordings until explicit session deletion. Capture-recovery tasker turns are spoken in the selected language and displayed in English, but excluded from context and comparison evidence. No model answer is invented. Semantic mutations save immediately; explicit durable boundaries await those saves and retain retry behavior. Recorder duration passes through pendingReply to the accepted model turn; replay backfills older duration.
+
+Scenario.skillsTested and evaluationPriorities are distinct optional source fields carried through extraction, tasker prompts and comparison. Task success and catastrophic failures precede normal scenario ranking.
+
+conversationTelemetry.ts persists metadata-only events in an AsyncStorage outbox, sends authenticated batches to backend/server.mjs /api/telemetry and never waits on uploads in the conversation path. backend/telemetry.mjs writes ignored per-session JSONL; timing-report.mjs deduplicates event IDs and reports stage percentiles and reply-to-player-status delay. See CONVERSATION_TIMING.md for limitations.

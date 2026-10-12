@@ -70,7 +70,7 @@ jest.mock('../src/services/audioService', () => ({
   startRecording: (...args: any[]) => (mockStartRecording as any)(...args), stopRecording: (...args: any[]) => (mockStopRecording as any)(...args),
   pauseRecording: (...args: any[]) => (mockPauseRecording as any)(...args), resumeRecording: (...args: any[]) => (mockResumeRecording as any)(...args),
   requestMicrophonePermission: (...args: any[]) => (mockPermission as any)(...args),
-  readAudioAsBase64: async () => ({ base64: 'cmVwbHk=', mimeType: 'audio/m4a' }), subscribeAudioLevel: () => () => {},
+  readAudioAsBase64: async () => ({ base64: 'cmVwbHk=', mimeType: 'audio/m4a', waveform: [0, .2, .5], audioDurationSeconds: 12.34 }), subscribeAudioLevel: () => () => {},
   releaseTemporaryRecording: (...args: any[]) => (mockReleaseTemporary as any)(...args),
 }));
 
@@ -371,18 +371,37 @@ describe('Real A/B screen integration with controlled device and provider bounda
     expect(mockSaved!.pendingReply?.audioAssetId).toBeTruthy();
   });
 
-  it('recovers from an empty recording through explicit deletion without losing the opener or inventing a reply', async () => {
+  it('asks to repeat missing speech without inventing a reply, scoring it or deleting evidence', async () => {
     mockTranscribe.mockResolvedValueOnce('');
     await mount(); await press('Start Model A'); await press('Finish model reply');
-    const pending = clone(mockSaved!.pendingReply!);
-    const openerAsset = mockSaved!.turns[0].audioAssetId!;
-    expect(visibleText()).toContain('No speech detected');
-    await press('Delete unfinished recording and retry capture');
-    expect(deleteAudioAssets).toHaveBeenCalledWith([pending.audioAssetId]);
-    expect(mockAssets.has(openerAsset)).toBe(true);
+    expect(visibleText()).toContain("Sorry, I couldn't hear that. Could you say it again?");
     expect(mockSaved!.pendingReply).toBeUndefined();
+    expect(mockSaved!.captureIssues).toHaveLength(1);
+    const issue = mockSaved!.captureIssues![0];
+    expect(issue.reason).toBe('no_speech');
+    expect(mockAssets.has(issue.audioAssetId)).toBe(true);
+    expect(deleteAudioAssets).not.toHaveBeenCalled();
     expect(mockSaved!.turns.filter(t => t.speaker === 'model')).toHaveLength(0);
-    expect(mockDecide).toHaveBeenCalledTimes(2);
+    expect(mockSaved!.turns.at(-1)).toMatchObject({ captureRecovery:true, delivered:true });
+    expect(contextForRun(mockSaved!)).toHaveLength(1);
+    expect(mockStartRecording).toHaveBeenCalledTimes(2);
+    await press('Finish model reply');
+    expect(mockSaved!.turns.filter(t => t.speaker === 'model')).toHaveLength(1);
+    expect(mockSaved!.captureIssues).toHaveLength(1);
+    expect(mockSaved!.vote).toBeUndefined();
+  });
+
+  it('uses Thai repeat speech with English chat captions and keeps recovery after TTS failure', async () => {
+    mockTranscribe.mockResolvedValueOnce('');
+    await mount('Thai'); await press('Start Model A');
+    mockTTS.mockRejectedValueOnce(new Error('Recovery voice unavailable'));
+    await press('Finish model reply');
+    expect(mockSaved!.captureIssues).toHaveLength(1);
+    expect(mockSaved!.turns.at(-1)!.sourceText).toContain('ช่วยพูดอีกครั้ง');
+    expect(mockSaved!.turns.at(-1)!.englishText).toContain('Could you say it again?');
+    await press('Retry failed action');
+    expect(mockSaved!.turns.filter(t => t.captureRecovery)).toHaveLength(1);
+    expect(mockSaved!.turns.at(-1)!.delivered).toBe(true);
     expect(mockStartRecording).toHaveBeenCalledTimes(2);
   });
 
@@ -418,4 +437,13 @@ describe('Real A/B screen integration with controlled device and provider bounda
     expect(mockDecide).toHaveBeenCalledTimes(1); expect(mockTTS).toHaveBeenCalledTimes(1);
     expect(mockSaved!.turns[0].delivered).toBe(true); expect(mockStartRecording).toHaveBeenCalledTimes(1);
   });
+  it('saves model duration and measured waveform before any final vote', async () => {
+    await mount(); await press('Start Model A'); await press('Finish model reply');
+    const reply = mockSaved!.turns.find(t => t.speaker === 'model')!;
+    expect(reply.audioDurationSeconds).toBe(12.34);
+    expect(mockAssets.get(reply.audioAssetId!)).toMatchObject({ waveform: [0, .2, .5] });
+    expect(mockSaved!.vote).toBeUndefined();
+    expect(visibleText()).toContain('0:12');
+  });
+
 });

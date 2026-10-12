@@ -8,6 +8,7 @@ const corrupt = () => new Error('Your saved A/B sessions could not be read. Stor
 const assetsFor = (session: ABSession): string[] => [
   ...session.turns.flatMap(turn => turn.audioAssetId ? [turn.audioAssetId] : []),
   ...(session.pendingReply ? [session.pendingReply.audioAssetId] : []),
+  ...(session.captureIssues || []).map(issue => issue.audioAssetId),
 ];
 
 async function readSessions(): Promise<ABSession[]> {

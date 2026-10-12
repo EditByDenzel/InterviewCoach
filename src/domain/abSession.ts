@@ -16,6 +16,7 @@ export interface Scenario {
   topic?: string;
   uncertainties?: string[];
   evaluationPriorities?: string[];
+  skillsTested?: string[];
   searchRequired?: boolean;
 }
 export interface ABTurn {
@@ -29,6 +30,7 @@ export interface ABTurn {
   scenarioOnly?: boolean;
   audioDurationSeconds?: number;
   action?: string;
+  captureRecovery?: boolean;
   createdAt: string;
 }
 export interface ABComparison {
@@ -50,7 +52,8 @@ export interface ABSession {
   elapsed: { A: number; B: number };
   comparison?: ABComparison;
   vote?: ABVote;
-  pendingReply?: { id: string; run: ABRun; audioAssetId: string; sourceText?: string };
+  pendingReply?: { id: string; run: ABRun; audioAssetId: string; sourceText?: string; audioDurationSeconds?: number };
+  captureIssues?: { id: string; run: ABRun; audioAssetId: string; reason: 'no_speech'; createdAt: string; audioDurationSeconds?: number }[];
 }
 
 const votes: ABVote[] = ['A', 'B', 'tie', 'insufficient_evidence'];
@@ -67,6 +70,7 @@ export function isScenario(value: any): value is Scenario {
     (value.topic === undefined || isText(value.topic)) &&
     (value.uncertainties === undefined || isTextList(value.uncertainties)) &&
     (value.evaluationPriorities === undefined || isTextList(value.evaluationPriorities)) &&
+    (value.skillsTested === undefined || isTextList(value.skillsTested)) &&
     (value.searchRequired === undefined || typeof value.searchRequired === 'boolean');
 }
 export function isABTurn(value: any): value is ABTurn {
@@ -77,6 +81,7 @@ export function isABTurn(value: any): value is ABTurn {
     (value.delivered === undefined || typeof value.delivered === 'boolean') &&
     (value.scenarioOnly === undefined || typeof value.scenarioOnly === 'boolean') &&
     (value.action === undefined || isText(value.action)) &&
+    (value.captureRecovery === undefined || (typeof value.captureRecovery === 'boolean' && value.speaker === 'tasker')) &&
     (value.audioDurationSeconds === undefined || nonnegative(value.audioDurationSeconds));
 }
 export function isABComparison(value: any): value is ABComparison {
@@ -107,8 +112,12 @@ export function isABSession(value: any): value is ABSession {
     const pending = value.pendingReply;
     if (!pending || !isText(pending.id) || !pending.id || !['A', 'B'].includes(pending.run) ||
         !isText(pending.audioAssetId) || !pending.audioAssetId ||
-        (pending.sourceText !== undefined && !isText(pending.sourceText))) return false;
+        (pending.sourceText !== undefined && !isText(pending.sourceText)) ||
+        (pending.audioDurationSeconds !== undefined && !nonnegative(pending.audioDurationSeconds))) return false;
   }
+  if (value.captureIssues !== undefined && (!Array.isArray(value.captureIssues) || !value.captureIssues.every((issue: any) =>
+    issue && isText(issue.id) && !!issue.id && ['A', 'B'].includes(issue.run) && isText(issue.audioAssetId) && !!issue.audioAssetId && issue.reason === 'no_speech' && isDate(issue.createdAt) &&
+    (issue.audioDurationSeconds === undefined || nonnegative(issue.audioDurationSeconds))))) return false;
   return true;
 }
 
@@ -140,7 +149,7 @@ export function appendTurn(session: ABSession, turn: ABTurn): ABSession {
   if (!isABTurn(turn)) throw new Error('The turn needs its original words and English transcript.');
   const existing = session.turns.find(item => item.id === turn.id);
   if (existing) {
-    const fields: (keyof ABTurn)[] = ['id', 'run', 'speaker', 'sourceText', 'englishText', 'audioAssetId', 'createdAt', 'delivered', 'scenarioOnly', 'audioDurationSeconds', 'action'];
+    const fields: (keyof ABTurn)[] = ['id', 'run', 'speaker', 'sourceText', 'englishText', 'audioAssetId', 'createdAt', 'delivered', 'scenarioOnly', 'audioDurationSeconds', 'action', 'captureRecovery'];
     if (!fields.every(field => existing[field] === turn[field])) throw new Error('A different turn already uses this ID.');
     return session;
   }
@@ -157,7 +166,7 @@ export function addElapsed(session: ABSession, seconds: number): ABSession {
   return update(session, { elapsed: { ...session.elapsed, [session.activeRun]: session.elapsed[session.activeRun] + seconds } });
 }
 export function contextForRun(session: ABSession, run: ABRun = session.activeRun): ABTurn[] {
-  return session.turns.filter(turn => turn.run === run && turn.delivered !== false).map(turn => ({ ...turn }));
+  return session.turns.filter(turn => turn.run === run && turn.delivered !== false && !turn.captureRecovery).map(turn => ({ ...turn }));
 }
 
 export interface CompletionOptions { goalResolved?: boolean; }

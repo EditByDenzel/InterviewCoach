@@ -20,3 +20,6 @@ yarn-error.log*
 ios/
 android/
 artifacts/
+backend/private/
+*.m4a
+*.wav

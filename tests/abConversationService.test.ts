@@ -38,6 +38,27 @@ describe('A/B conversation service safeguards', () => {
   const originalFetch = global.fetch;
   beforeEach(() => { jest.clearAllMocks(); (loadAudioAsset as jest.Mock).mockResolvedValue(null); });
   afterEach(() => { global.fetch = originalFetch; });
+  it('excludes no-speech recordings and repeat requests from scoring evidence', async () => {
+    const session = sessionB();
+    session.turns.push(turn('repeat', 'B', 'tasker', { captureRecovery:true, sourceText:'REPEAT_NOT_EVIDENCE' }));
+    session.captureIssues = [{ id:'silent', run:'B', audioAssetId:'silent-audio', reason:'no_speech', createdAt:new Date().toISOString() }];
+    respond(comparison);
+    const result = await compareRuns('test-key', endRun(session, { force:true }));
+    expect(JSON.stringify(requestBody())).not.toContain('REPEAT_NOT_EVIDENCE');
+    expect((loadAudioAsset as jest.Mock).mock.calls.map(call => call[0])).not.toContain('silent-audio');
+    expect(result.limitations.some(value => value.includes('not model failures'))).toBe(true);
+    expect(() => validateComparison({ ...comparison, findings:[{dimension:'Engagement',detail:'Penalty',turnIds:['repeat']}] }, session)).toThrow();
+  });
+  it('passes skills to both dialogue and assessment while preserving explicit priority ordering', async () => {
+    const session = sessionB();
+    session.scenario.skillsTested = ['Factual accuracy', 'Clarity'];
+    session.scenario.evaluationPriorities = ['Audio quality', 'Utility'];
+    respond(decision); await decideNextTurn('test-key', session);
+    expect(requestPayload().scenario.skillsTested).toEqual(['Factual accuracy', 'Clarity']);
+    respond(comparison); await compareRuns('test-key', endRun(session, {force:true}));
+    expect(requestPayload().scenario.evaluationPriorities).toEqual(['Audio quality', 'Utility']);
+    expect(requestBody().systemInstruction.parts[0].text).toContain('Task success and catastrophic failures take precedence');
+  });
 
   it('gives B its own complete context and fixed scenario, never A reply facts or assessment', async () => {
     const session = sessionB();

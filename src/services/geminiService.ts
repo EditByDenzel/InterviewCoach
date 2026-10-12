@@ -8,6 +8,8 @@
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 import { designPreviewFetch } from '../dev/designPreview';
+import { generateCustomVoiceAudio, isCustomVoice } from './customVoiceService';
+import { decodeWaveform } from './audioWaveform';
 
 // --------------- Model identifiers -------------------------
 // Confirmed from ai.google.dev/gemini-api/docs/models (9 Oct 2026)
@@ -136,6 +138,9 @@ export async function generateGeminiTTS(
   style: string = 'Speak clearly and naturally at a comfortable conversational pace.',
 ): Promise<string> {
   const url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+  if (isCustomVoice(voiceName)) {
+    return generateCustomVoiceAudio(apiKey, { text, voice: voiceName, style });
+  }
   const body = {
     model: TTS_MODEL,
     input: [{type:'user_input',content:[{type:'text',text,annotations:[{type:'speech_metadata',style}]}]}],
@@ -174,6 +179,10 @@ export async function transcribeAudio(
   mimeType: string = 'audio/m4a',
 ): Promise<string> {
   const url = `${GEMINI_BASE}/${TRANSCRIBE_MODEL}:generateContent?key=${apiKey}`;
+  // Digitally silent recordings must never be sent to a generative transcriber.
+  // Unsupported formats stay unknown; ordinary quiet speech is not rejected.
+  const peaks = await decodeWaveform(base64Audio).catch(() => null);
+  if (peaks?.length && peaks.every(peak => peak <= 0.00001)) return '';
 
   const body = {
     contents: [
@@ -186,7 +195,7 @@ export async function transcribeAudio(
             },
           },
           {
-            text: 'Transcribe this audio accurately. Return only the spoken words, no labels or formatting.',
+            text: 'Transcribe only intelligible speech actually audible in this recording, in its original language. Never invent words from silence, noise, music or the conversation topic. If there is no intelligible speech, return exactly [NO_SPEECH]. Otherwise return only the spoken words, no labels or formatting.',
           },
         ],
       },
@@ -203,5 +212,6 @@ export async function transcribeAudio(
     body: JSON.stringify(body),
   }, 'transcribe');
 
-  return readCompleteText(json, 'transcription');
+  const transcript = readCompleteText(json, 'transcription');
+  return transcript === '[NO_SPEECH]' ? '' : transcript;
 }

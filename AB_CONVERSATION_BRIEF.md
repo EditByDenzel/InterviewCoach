@@ -37,7 +37,7 @@ Legacy interviews remain separately readable. The new screen/store do not turn o
 
 Speech and display languages are independent. TTS receives the original selected-language wording, not the English translation. Translation failures retain audio and completed source text while showing an English recovery state.
 
-The selected pipeline records the whole reply, stops, transcribes the source, translates into English, and then chooses a follow-up using the full accepted run history. Final comparison uses both runs. The user confirmed live captions are unnecessary for this release; live transcription is optional future work. The interface states that transcripts appear after each reply.
+The selected pipeline records the whole reply and stops. Follow-up reasoning from the original recording runs alongside source transcription; English translation follows transcription. The prepared decision is accepted only for that finalized reply and current run, with complete valid run history; failures fall back to transcript-based reasoning. Final comparison uses both runs. The user confirmed live captions are unnecessary for this release; live transcription is optional future work. The interface states that transcripts appear after each reply.
 
 ## Speech reuse and character auditions
 
@@ -60,3 +60,11 @@ The reviewed private Live S2S reference prohibits AI-authored prompts/evaluation
 Automated checks cover domain transitions, isolation, validation, storage, provider failures and audio lifecycle. They do not establish fluent translation, convincing accents, real model quality or phone/computer acoustic reliability. Physical iOS and Android tests remain, including quiet/short replies, delays, within-answer pauses, echo, interruptions, permissions, storage pressure and reload.
 
 Optional later decisions include blind versus visible recommendations, auditioned voice selection and independently grounded verification. Device arrangement, English display, retention and scenario-based duration are already confirmed.
+
+## Capture recovery and evaluation precedence (12 October 2026)
+
+When a finalized recording has no intelligible speech, ask for a repeat in the selected language and resume listening. Retain the capture as an issue, never fabricate an answer. Recovery utterances and no-speech audio are excluded from scoring and do not satisfy minimum reply counts. Technical missing speech is not a model failure. Save each semantic conversation change, including comparison before the optional vote.
+
+Skills tested specify which abilities to probe and assess. Scenario priority orders their resulting utility, naturalness/engagement and audio evidence when choosing a preference. Task success is a pass/fail gate, and catastrophic failures override normal ranking. Preserve explicit imported skill names and priority ordering separately; do not turn them into a setup form or a checklist conversation. Missing evidence or uneven coverage requires uncertainty, not an invented penalty.
+
+Background timing stages, outbox behavior, backend JSONL storage and verification are documented in CONVERSATION_TIMING.md. Historical generation latencies remain unknown.

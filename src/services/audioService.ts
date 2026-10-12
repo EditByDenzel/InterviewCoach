@@ -11,8 +11,10 @@ import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { designPreviewEnabled, designPreviewRecordingUri } from '../dev/designPreview';
 import { bucketPeaks } from './audioWaveform';
+import { createSpeechGate } from './speechGate';
 let recordedPeaks: number[] = [];
 const captureWaveforms = new Map<string, number[]>();
+const captureDurations = new Map<string, number>();
 
 let activeSound: Audio.Sound | null = null;
 let finishPlayback: (() => Promise<void>) | null = null;
@@ -138,7 +140,7 @@ export async function playBase64Audio(
     sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
       if (cleanup) return;
       if (!status.isLoaded) { if(status.error) void finish(new Error(status.error)); return; }
-      try { onProgress?.(status.positionMillis,status.durationMillis??0); } catch (_) {}
+      try { onProgress?.(status.positionMillis,Number.isFinite(status.durationMillis) ? status.durationMillis! : 0); } catch (_) {}
       if (status.didJustFinish) void finish();
     });
     // Install completion/error handlers before playback, including very short clips.
@@ -310,8 +312,8 @@ export async function startRecording(onSilenceDetected?: () => void, onIdleTimeo
   recordingPaused = false;
   pausedMillis = 0;
   {
+    const speechGate = createSpeechGate();
     let speechStarted = false;
-    let lastSpeechTime: number | null = null;
     let recordStartTime = Date.now();
     let fired = false;
     resetRecordingDetector = () => {
@@ -322,12 +324,12 @@ export async function startRecording(onSilenceDetected?: () => void, onIdleTimeo
       if (fired || recordingPaused || generation !== recordingGeneration) return;
       const now = Date.now() - pausedMillis;
       broadcastAudioLevel(level);
+      const speech = speechGate.sample(speaking, now);
       if (speaking) {
-        speechStarted = true;
-        lastSpeechTime = now;
+        speechStarted = speech.confirmed;
       } else {
         const callback = !speechStarted && now - recordStartTime > 7000 ? onIdleTimeout
-          : speechStarted && lastSpeechTime !== null && now - lastSpeechTime > 2300 ? onSilenceDetected : undefined;
+          : speech.ended ? onSilenceDetected : undefined;
         if (!callback) return;
         fired = true;
         recording.setOnRecordingStatusUpdate(null);
@@ -386,8 +388,9 @@ export async function stopRecording(): Promise<string | null> {
   activeRecording = null;
   recording.setOnRecordingStatusUpdate(null);
   try {
-    await recording.stopAndUnloadAsync();
+    const stopped = await recording.stopAndUnloadAsync();
     const uri = recording.getURI() ?? null;
+    if (uri && stopped?.durationMillis > 0 && Number.isFinite(stopped.durationMillis)) captureDurations.set(uri, stopped.durationMillis / 1000);
     if (uri && recordedPeaks.length) captureWaveforms.set(uri, bucketPeaks(Array.from(recordedPeaks, value=>value || 0)));
     recordedPeaks = [];
     return uri;
@@ -397,6 +400,7 @@ export async function stopRecording(): Promise<string | null> {
 /** Release the original capture only after its durable audio and metadata were saved. */
 export async function releaseTemporaryRecording(uri: string): Promise<void> {
   captureWaveforms.delete(uri);
+  captureDurations.delete(uri);
   if (Platform.OS === 'web') {
     if (uri.startsWith('blob:') && typeof URL !== 'undefined') URL.revokeObjectURL(uri);
     return;
@@ -422,7 +426,7 @@ export async function releaseTemporaryRecording(uri: string): Promise<void> {
  */
 export async function readAudioAsBase64(
   uri: string,
-): Promise<{ base64: string; mimeType: string; waveform?: number[] }> {
+): Promise<{ base64: string; mimeType: string; waveform?: number[]; audioDurationSeconds?: number }> {
   let webMimeType = '';
   const base64 = Platform.OS === 'web' ? await new Promise<string>(async (resolve, reject) => {
     try {
@@ -454,5 +458,5 @@ export async function readAudioAsBase64(
   const mimeType = Platform.OS === 'web' ? webMimeType || 'audio/webm' : mimeMap[ext] ?? 'audio/m4a';
 
   const waveform = captureWaveforms.get(uri);
-  return { base64, mimeType, ...(waveform ? {waveform} : {}) };
+  return { base64, mimeType, ...(waveform ? {waveform} : {}), ...(captureDurations.has(uri) ? { audioDurationSeconds: captureDurations.get(uri) } : {}) };
 }

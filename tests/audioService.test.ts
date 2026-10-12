@@ -27,6 +27,14 @@ describe('Interview audio controls',()=>{
     for(let i=0;i<15;i++)await Promise.resolve();
     return {playback};
   };
+  it('retains recorder duration until the captured file is released', async () => {
+    await startRecording();
+    mockRecording.stopAndUnloadAsync.mockResolvedValueOnce({ durationMillis: 12500 } as never);
+    const uri = await stopRecording();
+    expect((await readAudioAsBase64(uri!)).audioDurationSeconds).toBe(12.5);
+    await releaseTemporaryRecording(uri!);
+    expect((await readAudioAsBase64(uri!)).audioDurationSeconds).toBeUndefined();
+  });
   it('keeps actual metered amplitude in timeline order for compressed native recordings',async()=>{
     await startRecording();
     const listener=mockRecording.setOnRecordingStatusUpdate.mock.calls.find(call=>typeof call[0]==='function')?.[0];
@@ -117,19 +125,19 @@ describe('Interview audio controls',()=>{
   it('accepts a short spoken answer and triggers silence only once',async()=>{
     const silence=jest.fn();const idle=jest.fn();await startRecording(silence,idle);
     const listener=recordingListener();
-    listener({isRecording:true,metering:-20});
+    for (let i=0;i<4;i++) { listener({isRecording:true,metering:-20}); jest.advanceTimersByTime(80); }
     jest.advanceTimersByTime(2400);listener({isRecording:true,metering:-100});
     jest.advanceTimersByTime(10_000);listener({isRecording:true,metering:-100});
     expect(silence).toHaveBeenCalledTimes(1);expect(idle).not.toHaveBeenCalled();
   });
   it('excludes paused time from answer silence and idle detection',async()=>{
     const silence=jest.fn();const idle=jest.fn();await startRecording(silence,idle);
-    const listener=recordingListener();listener({isRecording:true,metering:-20});
+    const listener=recordingListener();for (let i=0;i<4;i++) { listener({isRecording:true,metering:-20}); jest.advanceTimersByTime(80); }
     jest.advanceTimersByTime(1000);await pauseRecording();
     jest.advanceTimersByTime(30_000);listener({isRecording:true,metering:-100});
     expect(silence).not.toHaveBeenCalled();await resumeRecording();
     listener({isRecording:true,metering:-100});expect(silence).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(1400);listener({isRecording:true,metering:-100});
+    jest.advanceTimersByTime(1500);listener({isRecording:true,metering:-100});
     expect(silence).toHaveBeenCalledTimes(1);expect(idle).not.toHaveBeenCalled();
   });
   it('rearms speech detection after an idle pause without immediately timing out again',async()=>{
@@ -139,7 +147,7 @@ describe('Interview audio controls',()=>{
     expect(idle).toHaveBeenCalledTimes(1);await pauseRecording();
     jest.advanceTimersByTime(20_000);await resumeRecording();
     listener({isRecording:true,metering:-100});expect(idle).toHaveBeenCalledTimes(1);
-    listener({isRecording:true,metering:-20});
+    for (let i=0;i<4;i++) { listener({isRecording:true,metering:-20}); jest.advanceTimersByTime(80); }
     jest.advanceTimersByTime(2400);listener({isRecording:true,metering:-100});
     expect(silence).toHaveBeenCalledTimes(1);
   });

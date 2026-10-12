@@ -27,6 +27,26 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+it('retains each question and answer without needing a comparison or final vote', async () => {
+  let session = fresh('autosave');
+  session = appendTurn(session, { id:'q1', run:'A', speaker:'tasker', sourceText:'Question', englishText:'Question', createdAt:new Date().toISOString() });
+  await saveABSession(session);
+  expect((await loadABSession('autosave'))?.turns).toHaveLength(1);
+  session = appendTurn(session, { id:'a1', run:'A', speaker:'model', sourceText:'Answer', englishText:'Answer', audioAssetId:'recorded', audioDurationSeconds:13.2, createdAt:new Date().toISOString() });
+  await saveABSession(session);
+  expect((await loadABSession('autosave'))?.turns[1].audioDurationSeconds).toBe(13.2);
+  expect((await loadABSession('autosave'))?.vote).toBeUndefined();
+});
+it('retains no-speech capture evidence until the entire conversation is explicitly deleted', async () => {
+  const session = fresh('capture');
+  session.captureIssues = [{id:'silent',run:'A',audioAssetId:'silent-audio',reason:'no_speech',createdAt:new Date().toISOString(),audioDurationSeconds:4}];
+  await saveABSession(session);
+  expect((await loadABSession('capture'))?.captureIssues).toEqual(session.captureIssues);
+  expect(deleteAudioAssets).not.toHaveBeenCalled();
+  await deleteABSession('capture');
+  expect(deleteAudioAssets).toHaveBeenCalledWith(['silent-audio']);
+});
+
 it('saves original and English text plus audio references until explicitly deleted', async () => {
   await saveABSession(fresh('one', ['evidence']));
   const loaded = await loadABSession('one');

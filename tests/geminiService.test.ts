@@ -88,6 +88,22 @@ describe('Gemini Service', () => {
   });
 
   describe('transcribeAudio', () => {
+    it('rejects digital silence without sending any transcription request', async () => {
+      const wav = Buffer.alloc(44 + 512);
+      wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+      wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+      wav.writeUInt32LE(24000, 24); wav.writeUInt32LE(48000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+      wav.write('data', 36); wav.writeUInt32LE(512, 40);
+      global.fetch = jest.fn();
+      expect(await transcribeAudio('mock-key', wav.toString('base64'), 'audio/wav')).toBe('');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+    it('returns no speech rather than invented text when the provider identifies silence', async () => {
+      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{text:'[NO_SPEECH]'}] }, finishReason:'STOP' }] }) } as any);
+      expect(await transcribeAudio('mock-key', 'YQ==')).toBe('');
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body.contents[0].parts[1].text).toContain('Never invent words');
+    });
     it('sends base64 audio and returns transcribed text', async () => {
       const mockResponse = {
         candidates: [

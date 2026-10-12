@@ -8,6 +8,89 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Capture reliability and background timing backlog - 2026-10-12
+
+- Reject isolated meter spikes before arming automatic answer cutoff; preserve short speech and the 2.3-second end-of-speech interval.
+- Reject decodable digital silence locally and explicitly handle no-speech transcription without accepting invented model replies.
+- Retain model recording duration through transcription retries and save measured waveform metadata; backfill older duration on replay.
+- Autosave semantic chat changes immediately, with durable-boundary retries; saving questions, replies and comparisons never depends on a final vote.
+- Speak a natural repeat request for no-speech capture, retain its recording and exclude recovery from model scoring; support Thai speech with English captions.
+- Preserve imported skills separately from scenario priority and carry both to dialogue/comparison prompts.
+- Add a durable timing outbox, authenticated backend JSONL timelines and a local timing report, without UI changes. See CONVERSATION_TIMING.md for stages and evidence limits.
+- Verified 214 app tests, 9 backend tests, TypeScript and whitespace checks; the authenticated local timing endpoint returned HTTP 200. Real microphone/device re-test and full transcript audit remain outstanding.
+
+### Denzel Consent 5 retry - 2026-10-12
+
+- Moved Consent 5 into private Denzel-consent.m4a and archived Consent 4.
+  Verified file integrity; retried only Denzel using Voice 4 and persistent storage.
+- Google again reported a consent phrase mismatch. No Denzel profile was
+  created. Onyi was unchanged. The rejection's cause remains unverified.
+
+### Fresh Denzel reference and consent pair - 2026-10-12
+
+- Moved Chidera Voice 4 into private recordings as Denzel-reference.m4a and
+  paired it with a private copy of Consent 4 as Denzel-consent.m4a.
+- Added Denzel routing, picker entry and default initialization pair. Retained
+  old Chidera routing for saved-session compatibility; Onyi was not regenerated.
+- Google rejected this fresh persistent Denzel attempt with its reported phrase
+  mismatch. No Denzel profile was created; underlying cause remains unverified.
+- Passed 199 app tests, six backend tests, TypeScript and whitespace checks.
+
+### Chidera Consent 4 retry - 2026-10-12
+
+- Moved Consent 4 into the private app recordings folder and archived Consent 3.
+  Verified moved file integrity and retried only Chidera with persistent storage.
+- Google again reported a consent phrase mismatch. No Chidera profile was
+  created; Onyi's working persistent profile was preserved. The rejection's
+  underlying cause remains unverified. No consent transcription was performed.
+
+### Persistent voice profiles - 2026-10-12
+
+- Changed voice initialization to store: true and persist returned voice IDs.
+  Save Google's expiration metadata when available; stateful availability is
+  provider-authoritative because use can extend expiry. Old keys remain readable.
+- Retried both current local reference/consent pairs. Onyi's persistent profile
+  was created and retrieved successfully, with provider expiry 12 October 2027.
+  Verified actual WAV synthesis through the running app endpoint using that ID.
+- Google again reported a consent phrase mismatch for Chidera; the underlying
+  cause is unverified. No diagnostic consent transcription was performed.
+- Passed six backend tests, 198 app tests, TypeScript and whitespace checks.
+
+### Local voice recordings and Consent 3 - 2026-10-12
+
+- Moved both reference recordings and the latest consent files into the app's
+  ignored backend/private/recordings directory, verifying SHA-256 hashes.
+  Initialization now resolves these private inputs relative to its own script.
+- Onyi initialized successfully again. Google rejected Chidera Consent 3 for
+  a mandatory phrase mismatch; Chidera remains unavailable. No diagnostic
+  consent transcription was performed. Five backend tests passed.
+
+### Replacement voice consent - 2026-10-12
+
+- Updated initialization to Onyi Consent 2 .m4a and Chidera Consent 2.m4a.
+- Google accepted Onyi and issued a private key expiring 19 October 2026.
+  Verified actual WAV synthesis through the app endpoint; private audition
+  output stays ignored. Restarted the local backend with network access.
+- Google rejected Chidera's new consent for a mandatory phrase mismatch.
+  Chidera remains unavailable pending valid consent. No consent transcription
+  was performed. Five backend tests passed; phone playback remains unverified.
+
+### Custom Onyi and Chidera voices - 2026-10-12
+
+- Added Google GenAI SDK voice initialization for both supplied reference/consent
+  pairs, temporary WAV conversion and first-30-second reference extraction.
+  Originals are preserved; encrypted seven-day keys stay in the ignored backend
+  private directory and can be renewed without restarting the server.
+- Added authenticated, origin-restricted POST /api/tts with WAV JSON or binary
+  output, audio-only source-language transcription, payload/concurrency limits
+  and redacted provider errors. This is a single-owner local backend.
+- Added Onyi/Chidera to the existing picker and shared Gemini speech path for
+  new A/B conversations and legacy interviews, preserving playback and replay.
+- Verified 198 app tests, five backend tests, TypeScript and whitespace checks.
+  Live Google initialization rejected both consent recordings for a mandatory
+  phrase mismatch. No voice keys or custom speech were produced. User will
+  re-record consent; diagnostic transcription was declined.
+
 ### Audio-derived chat waveforms - 2026-10-11
 
 - Replaced repeating waveform arrays and timed pulsing with amplitude envelopes

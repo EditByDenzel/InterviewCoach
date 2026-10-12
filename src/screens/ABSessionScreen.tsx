@@ -19,6 +19,7 @@ import { conversationStyles as chat } from '../components/conversationStyles';
 import { FadeIn, LiveDots, MotionPressable, useMotion, Reveal } from '../components/Motion';
 import { useConversationRefraction } from '../components/ConversationRefraction';
 import { AudioWaveform } from '../components/AudioWaveform';
+import { configureTimingBacklog, recordTiming, timeConversationStage } from '../services/conversationTelemetry';
 
 type Props = StackScreenProps<RootStackParamList, 'ABSession'>;
 type Phase = 'ready' | 'thinking' | 'speaking' | 'listening' | 'paused' | 'transcribing' | 'ending' | 'waiting' | 'comparing' | 'complete' | 'error';
@@ -52,19 +53,36 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const state = useRef(session), alive = useRef(true), exiting = useRef(false), busy = useRef(false), pausedRef = useRef(false), phaseRef = useRef<Phase>('ready');
   const automatic = useRef(true), settings = useRef<AppSettings | null>(null), finishRequested = useRef(false), retry = useRef<(() => Promise<void>) | null>(null);
   const log = useRef<ScrollView>(null), clipCache = useRef(new Map<string, string>()), lastTick = useRef(Date.now());
-  const finalized = useRef<(uri: string) => Promise<void>>(async () => {});
-  const temporaryReply = useRef<{ id: string; uri: string; run: 'A' | 'B' } | null>(null);
+  const finalized = useRef<(uri: string, seconds: number) => Promise<void>>(async () => {});
+  const temporaryReply = useRef<{ id: string; uri: string; run: 'A' | 'B'; seconds?: number } | null>(null);
   const retainingReply = useRef<Promise<void> | null>(null);
   const preparedReply = useRef<{id:string;run:'A'|'B';decision:Promise<DialogueDecision|null>} | null>(null);
+  const automaticSave = useRef<{ snapshot: ABSession; promise: Promise<void> } | null>(null);
   const { reduced } = useMotion();
   useEffect(() => { void setPlaybackMuted(muted); }, [muted]);
 
-  const showPhase = (value: Phase) => { phaseRef.current = value; if (alive.current) setPhase(value); };
-  const update = (value: ABSession) => { state.current = value; if (alive.current) setSession(value); };
+  const timingContext = (turnId?: string) => ({ sessionId: state.current.id, run: state.current.activeRun, voice: state.current.persona.voice, language: state.current.scenario.language, ...(turnId ? { turnId } : {}) });
+  const timed = <T,>(stage: string, work: () => Promise<T>, turnId?: string) => timeConversationStage(timingContext(turnId), stage, work);
+  const showPhase = (value: Phase) => { if (phaseRef.current !== value) recordTiming(timingContext(), `phase.${value}`); phaseRef.current = value; if (alive.current) setPhase(value); };
+  const update = (value: ABSession) => {
+    const previous = state.current;
+    state.current = value; if (alive.current) setSession(value);
+    // Save semantic changes immediately, including replay duration and vote.
+    // Elapsed-clock ticks alone do not rewrite the whole conversation.
+    if (value.turns !== previous.turns || value.pendingReply !== previous.pendingReply || value.status !== previous.status || value.vote !== previous.vote || value.persona !== previous.persona) {
+      const promise = timed('session.save', () => saveABSession(value));
+      automaticSave.current = { snapshot: value, promise };
+      void promise.catch(err => { if (alive.current) setSaveWarning(`${err.message} Keep this chat open and retry saving.`); });
+    }
+  };
   const active = () => alive.current && !exiting.current;
   const ensureActive = () => { if (!active()) throw new Error('Session closed'); };
   const persist = async () => {
-    try { await saveABSession(state.current); if (active()) setSaveWarning(''); }
+    const pending = automaticSave.current;
+    automaticSave.current = null;
+    const snapshot = state.current;
+    const matches = pending && pending.snapshot.turns === snapshot.turns && pending.snapshot.pendingReply === snapshot.pendingReply && pending.snapshot.status === snapshot.status && pending.snapshot.vote === snapshot.vote;
+    try { await (matches ? pending.promise : timed('session.save', () => saveABSession(snapshot))); if (active()) setSaveWarning(''); }
     catch (err) { if (active()) setSaveWarning(`${(err as Error).message} Keep this chat open and retry saving.`); throw err; }
   };
   const persistThen = async (continuation: () => Promise<void>) => {
@@ -76,8 +94,8 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const capture = useRef<ReturnType<typeof createRecordingSession> | null>(null);
   if (!capture.current) capture.current = createRecordingSession({
-    requestPermission: requestMicrophonePermission, start: startRecording, stop: stopRecording, pause: pauseRecording, resume: resumeRecording, canAccept: active,
-    onFinalized: uri => finalized.current(uri),
+    requestPermission: requestMicrophonePermission, start: (silence, idle) => timed('capture.start', () => startRecording(() => { recordTiming(timingContext(), 'capture.silence'); silence(); }, () => { recordTiming(timingContext(), 'capture.idle'); idle(); })), stop: () => timed('capture.stop', stopRecording), pause: pauseRecording, resume: resumeRecording, canAccept: active,
+    onFinalized: (uri, seconds) => finalized.current(uri, seconds),
     onError: err => { if (active()) { setError(err.message); showPhase('error'); } },
     onChange: snap => { if (active()) { setRecording(snap.recording); setSeconds(snap.elapsedSeconds); setPaused(snap.paused); if (snap.recording) { pausedRef.current = snap.paused; showPhase(snap.paused ? 'paused' : 'listening'); } } },
   });
@@ -91,6 +109,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const patchTurn = (turnId: string, patch: Partial<ABTurn>) => update({ ...state.current, turns: state.current.turns.map(t => t.id === turnId ? { ...t, ...patch } : t) });
   const apiKey = () => settings.current?.geminiApiKey || '';
+  configureTimingBacklog(apiKey);
   const endCurrent = async () => {
     update(endRun(state.current, { force: true })); finishRequested.current = false; pausedRef.current = false; setPaused(false);
     await persistThen(async () => {
@@ -100,7 +119,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const evaluate = async () => {
     retry.current = evaluate; showPhase('comparing');
-    const result = await compareRuns(apiKey(), state.current); ensureActive();
+    const result = await timed('comparison', () => compareRuns(apiKey(), state.current)); ensureActive();
     update(completeComparison(state.current, result));
     await persistThen(async () => { showPhase('complete'); retry.current = null; });
   };
@@ -112,9 +131,10 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     const key = cacheKey({ text: turn.sourceText, language: current.scenario.language, voice: current.persona.voice, style: current.persona.style, model: 'gemini-3.8-flash-tts', encoding: 'wav' });
     let assetId = turn.audioAssetId || clipCache.current.get(key);
     let audio = assetId ? await loadAudioAsset(assetId) : null;
+    recordTiming(timingContext(turn.id), 'tts.cache', { reused: !!audio });
     if (!audio) {
       showPhase('thinking');
-      const base64 = await generateGeminiTTS(apiKey(), turn.sourceText, current.persona.voice, current.persona.style); ensureActive();
+      const base64 = await timed('tts.generate', () => generateGeminiTTS(apiKey(), turn.sourceText, current.persona.voice, current.persona.style), turn.id); ensureActive();
       assetId = `${current.id}-${turn.id}-speech`;
       // Reserve ownership before the asynchronous file write, so closing or
       // deleting during it still knows which asset belongs to this session.
@@ -127,9 +147,11 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     if (pausedRef.current) { showPhase('paused'); return; }
     showPhase('speaking'); setPlayingId(turn.id); setProgress(0);
     try {
-      await playBase64Audio(audio.base64, audio.mimeType.includes('mpeg') ? 'mp3' : 'wav', (position, duration) => {
+      let firstProgress = true;
+      await timed('audio.play', () => playBase64Audio(audio!.base64, audio!.mimeType.includes('mpeg') ? 'mp3' : 'wav', (position, duration) => {
+        if (firstProgress) { firstProgress = false; recordTiming(timingContext(turn.id), 'audio.firstProgress', { audioSeconds: duration / 1000 }); }
         if (active()) { setProgress(duration ? position / duration : 0); if (duration && state.current.turns.find(t => t.id === turn.id)?.audioDurationSeconds !== duration / 1000) patchTurn(turn.id, { audioDurationSeconds: duration / 1000 }); }
-      });
+      }), turn.id);
       ensureActive();
     } finally { if (active()) { setPlayingId(null); setProgress(0); } }
     if (pausedRef.current) { showPhase('paused'); return; }
@@ -151,20 +173,37 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     const lastReply = contextForRun(s).filter(t=>t.speaker==='model').at(-1);
     const early = prepared && prepared.id === lastReply?.id && prepared.run === s.activeRun ? await prepared.decision : null;
     ensureActive(); preparedReply.current = null;
-    const decision = early || await decideNextTurn(apiKey(), s, eligible); ensureActive();
+    const decision = early || await timed('decision.text', () => decideNextTurn(apiKey(), s, eligible)); ensureActive();
     if (finishRequested.current || completionForRun(state.current, { goalResolved: decision.goalResolved }).shouldEnd) { await endCurrent(); return; }
     const reused = eligible.find(t => t.id === decision.reuseTurnId);
+    recordTiming(timingContext(), 'decision.accepted', { reused: !!reused });
     const turn: ABTurn = { id: id(state.current, 'tasker'), run: state.current.activeRun, speaker: 'tasker', sourceText: decision.sourceText, englishText: decision.englishText,
       audioAssetId: reused?.audioAssetId, action: decision.action || (reused ? 'Reused a question' : lastReply ? 'Asked a follow-up' : 'Asked an opening question'), scenarioOnly: decision.scenarioOnly, delivered: false, createdAt: new Date().toISOString() };
     update(appendTurn(state.current, turn));
     await persistThen(() => speakTurn(turn));
   };
 
-  const acceptReply = async (sourceText: string, englishText: string, replyId: string, audioAssetId?: string) => {
+  const acceptReply = async (sourceText: string, englishText: string, replyId: string, audioAssetId?: string, audioDurationSeconds?: number) => {
     ensureActive();
-    update(appendTurn(state.current, { id: replyId, run: state.current.activeRun, speaker: 'model', sourceText, englishText, audioAssetId, createdAt: new Date().toISOString() }));
+    update(appendTurn(state.current, { id: replyId, run: state.current.activeRun, speaker: 'model', sourceText, englishText, audioAssetId, audioDurationSeconds, createdAt: new Date().toISOString() }));
     update({ ...state.current, pendingReply: undefined }); setDraft(''); setInputHeight(56); setInputFocused(false); setPaused(false); pausedRef.current = false;
     await persistThen(next);
+  };
+  const recoverNoSpeech = async (pending: NonNullable<ABSession['pendingReply']>) => {
+    preparedReply.current = null;
+    const issues = state.current.captureIssues || [];
+    update({ ...state.current, pendingReply: undefined, captureIssues: issues.some(issue => issue.id === pending.id) ? issues : [...issues, {
+      id: pending.id, run: pending.run, audioAssetId: pending.audioAssetId, reason: 'no_speech', createdAt: new Date().toISOString(), audioDurationSeconds: pending.audioDurationSeconds,
+    }] });
+    await persist(); ensureActive();
+    recordTiming(timingContext(pending.id), 'capture.noSpeech');
+    if (finishRequested.current || completionForRun(state.current).shouldEnd) { await endCurrent(); return; }
+    const englishText = "Sorry, I couldn't hear that. Could you say it again?";
+    const turn: ABTurn = { id: id(state.current, 'tasker'), run: state.current.activeRun, speaker: 'tasker',
+      sourceText: state.current.scenario.language === 'Thai' ? 'ขอโทษนะ ฟังไม่ชัดเลย ช่วยพูดอีกครั้งได้ไหม' : englishText,
+      englishText, action: 'Asked to repeat', captureRecovery: true, scenarioOnly: false, delivered: false, createdAt: new Date().toISOString() };
+    update(appendTurn(state.current, turn));
+    await persistThen(() => speakTurn(turn));
   };
   const finalizePending = async () => {
     retry.current = finalizePending; showPhase('transcribing');
@@ -178,16 +217,16 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       const snapshot = state.current;
       const used = new Set(contextForRun(snapshot).filter(t=>t.speaker==='tasker').map(t=>t.sourceText));
       const eligible = snapshot.turns.filter(t=>t.speaker==='tasker'&&t.scenarioOnly&&t.delivered&&!used.has(t.sourceText));
-      preparedReply.current = {id:pending.id,run:pending.run,decision:decideNextTurn(apiKey(), snapshot, eligible, audio).catch(()=>null)};
+      preparedReply.current = {id:pending.id,run:pending.run,decision:timed('decision.audio', () => decideNextTurn(apiKey(), snapshot, eligible, audio), pending.id).catch(()=>null)};
     }
     let source = pending.sourceText;
     if (!source) {
-      source = await transcribeAudio(apiKey(), audio.base64, audio.mimeType); ensureActive();
-      if (!source.trim()) throw new Error('No speech detected. Record again or type a reply.');
+      source = await timed('transcription', () => transcribeAudio(apiKey(), audio.base64, audio.mimeType), pending.id); ensureActive();
+      if (!source.trim()) { await recoverNoSpeech(pending); return; }
       update({ ...state.current, pendingReply: { ...pending, sourceText: source } }); await persist();
     }
-    const english = await translateToEnglish(apiKey(), source, state.current.scenario.language); ensureActive();
-    await acceptReply(source, english, pending.id, pending.audioAssetId);
+    const english = await timed('translation', () => translateToEnglish(apiKey(), source!, state.current.scenario.language), pending.id); ensureActive();
+    await acceptReply(source, english, pending.id, pending.audioAssetId, pending.audioDurationSeconds);
   };
   const deletePendingRecording = async () => {
     const pending = state.current.pendingReply;
@@ -206,11 +245,11 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     const pending = temporaryReply.current;
     if (!pending) return Promise.resolve();
     const action = (async () => {
-      const audio = await readAudioAsBase64(pending.uri);
+      const audio = await timed('capture.read', () => readAudioAsBase64(pending.uri), pending.id);
       const assetId = `${state.current.id}-${pending.id}-reply`;
-      update({ ...state.current, pendingReply: { id: pending.id, run: pending.run, audioAssetId: assetId } });
+      update({ ...state.current, pendingReply: { id: pending.id, run: pending.run, audioAssetId: assetId, audioDurationSeconds: audio.audioDurationSeconds || pending.seconds } });
       await persist();
-      await saveAudioAsset(assetId, { base64: audio.base64, mimeType: audio.mimeType });
+      await timed('capture.save', () => saveAudioAsset(assetId, audio), pending.id);
       await persist();
       await releaseTemporaryRecording(pending.uri);
       if (temporaryReply.current === pending) temporaryReply.current = null;
@@ -218,8 +257,9 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     retainingReply.current = action.finally(() => { retainingReply.current = null; });
     return retainingReply.current;
   };
-  finalized.current = async uri => {
-    temporaryReply.current = { id: id(state.current, 'model'), uri, run: state.current.activeRun };
+  finalized.current = async (uri, seconds) => {
+    recordTiming(timingContext(), 'capture.finalized', { audioSeconds: seconds });
+    temporaryReply.current = { id: id(state.current, 'model'), uri, run: state.current.activeRun, seconds };
     await operate(async () => {
       showPhase('transcribing');
       await retainCapturedReply(); ensureActive(); await finalizePending();
@@ -235,6 +275,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       const opener = state.current.turns.find(t => t.run === 'A' && t.speaker === 'tasker' && t.delivered);
       if (!opener) throw new Error('Model A has no delivered opener to reuse. Resume A or start a new scenario.');
       update(startB(state.current));
+      recordTiming(timingContext(opener.id), 'opening.reused', { reused: true });
       const turn = { ...opener, id: id(state.current, 'tasker'), run: 'B' as const, action:'Reused the opening question', delivered: false, createdAt: new Date().toISOString() };
       update(appendTurn(state.current, turn)); await persistThen(() => speakTurn(turn));
     } else if (state.current.status === 'comparing') await evaluate();
@@ -265,7 +306,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       const audio = turn.audioAssetId ? await loadAudioAsset(turn.audioAssetId) : null;
       if (!audio) throw new Error('No saved audio is available for this turn.');
       ensureActive(); setPlayingId(turn.id); setProgress(0);
-      try { await playBase64Audio(audio.base64, audioExtension(audio.mimeType), (position, duration) => { if (active()) setProgress(duration ? position / duration : 0); }); }
+      try { await playBase64Audio(audio.base64, audioExtension(audio.mimeType), (position, duration) => { if (active()) { setProgress(duration ? position / duration : 0); if (duration && state.current.turns.find(t => t.id === turn.id)?.audioDurationSeconds !== duration / 1000) patchTurn(turn.id, { audioDurationSeconds: duration / 1000 }); } }); }
       finally { if (active()) { setPlayingId(null); setProgress(0); if (hadCapture) { pausedRef.current = true; setPaused(true); showPhase('paused'); } } }
     });
   };
@@ -278,12 +319,13 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const close = async () => {
     if (exiting.current) return;
+    recordTiming(timingContext(), 'session.close');
     exiting.current = true;
     setupAbort.current.abort();
     try {
       if (capture.current!.getSnapshot().recording) {
         const uri = await stopRecording();
-        if (uri) temporaryReply.current = { id: id(state.current, 'model'), uri, run: state.current.activeRun };
+        if (uri) temporaryReply.current = { id: id(state.current, 'model'), uri, run: state.current.activeRun, seconds: capture.current!.getSnapshot().elapsedSeconds };
       }
       await retainCapturedReply();
       await capture.current!.dispose(); await stopPlayback(); await persist();
@@ -314,6 +356,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
           showPhase('ready');
         }
         setLoaded(true);
+        recordTiming(timingContext(), saved ? 'session.reopened' : 'session.created');
         retry.current = null;
         // Sending a topic is the start action, as in the original chat. Reopened
         // sessions wait for explicit resume; no camera/provider work repeats.

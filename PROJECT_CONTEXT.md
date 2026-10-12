@@ -1,6 +1,6 @@
 # Coachie project handoff
 
-Updated 11 October 2026.
+Updated 12 October 2026.
 
 ## Working location
 
@@ -33,3 +33,7 @@ Read AB_IMPLEMENTATION_PLAN.md, AB_CONVERSATION_BRIEF.md, ARCHITECTURE.md, PLAN.
 Home photo is inside the composer at the left. Its former toolbar slot saves English, Thai or Nigerian English through partial settings updates, preserving credentials. Chats save and close automatically; failed saves stay open for retry. npm run web uses local .env loading on 8083; fixture mode remains on 8084.
 
 Completed-reply response preparation now runs from the original audio alongside transcription/translation. It uses isolated active-run context and eligible reusable questions; only a matching finalized reply can consume it. Persist the reply before playback. Failed audio reasoning falls back to complete text; close/run-end prevents stale playback. Action labels are stored per tasker turn; voice captions use the fixed A/B Gemini voice. This is overlapping whole-recording processing, not live streaming or measured latency.
+
+Capture recovery now asks for a repeat in the selected language when finalized audio has no intelligible speech. Save the recording as a capture issue; exclude it and recovery utterances from model scoring and valid dialogue context. Semantic state changes autosave before the optional vote. Model audio duration and measured waveform metadata survive transcription retries.
+
+Photo extraction retains skillsTested separately from evaluationPriorities. Skills guide comparable natural probes; task success/catastrophic failures precede the explicit scenario priority. No additional setup UI. Background timing events use a durable AsyncStorage outbox and authenticated backend JSONL, documented in CONVERSATION_TIMING.md. Historical generation timings cannot be reconstructed. Verification: 214 app tests, 9 backend tests, TypeScript, whitespace and an authenticated endpoint probe; new physical capture validation remains outstanding.
