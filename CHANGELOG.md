@@ -8,6 +8,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Shared backend history and Home cards - 2026-10-12
+
+- Home now renders every saved conversation from the shared library, newest first. Deleted sample cards stay deleted; original card gradients, sizing and hidden scrollbars are preserved.
+- Ignore superseded Home refreshes and wait for queued legacy saves/deletions before library reads.
+- Make the configured authenticated PC backend authoritative for conversations, original/English transcripts, recordings, waveforms and sample deletion state. Timing timelines remain backend files with their existing temporary offline outbox.
+- Import old device histories only when absent from the backend, copying referenced recordings first; preserve original migration backups and never restore backend-deleted chats.
+- Use revision checks to reject stale writes and protect shared recordings during deletion. Backend outages remain explicit retryable save/load failures; offline conversation syncing and private phone HTTPS setup are still pending.
+- Document storage behavior and phone access in ARCHITECTURE.md and PHONE_ACCESS.md.
+- Verified 226 app tests, 18 backend tests, TypeScript and whitespace checks. The local browser migrated one session and all seven referenced recordings; other browser histories and physical phone networking require separate verification.
+
+
 ### Capture reliability and background timing backlog - 2026-10-12
 
 - Reject isolated meter spikes before arming automatic answer cutoff; preserve short speech and the 2.3-second end-of-speech interval.

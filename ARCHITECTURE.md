@@ -40,6 +40,8 @@ ABSessionScreen retains failed-stage continuations, pending replies, asset owner
 
 ## Persistence
 
+With EXPO_PUBLIC_TTS_BACKEND_URL configured, historyBackend.ts makes the authenticated Node backend authoritative for conversation metadata, sample deletion tombstones and immutable audio. backend/storage.mjs serializes durable atomic file writes under ignored backend/private/history and checks revisions to reject stale device updates. On first load, old local histories import only absent, nondeleted sessions; their referenced recordings upload before session import. Original local data is preserved as a migration backup. New saves/read/replay use the backend. Backend failure is reported for retry rather than presenting an isolated browser history as synchronized. Design fixtures and installations with no backend URL retain the local adapters described below. Private HTTPS phone access is still pending; see PHONE_ACCESS.md.
+
 - abSessionStore.ts: separate validated @coachie_ab_sessions_v1 metadata with serialized snapshots and reference-aware session deletion.
 - audioAssetStore.ts: immutable binary assets in native document files with metadata, or browser IndexedDB Blobs. No automatic eviction. Temporary captured files are released only after durable audio and session persistence.
 - conversationLibrary.ts: shared history facade projecting A/B summaries beside legacy interviews and bundled samples. A/B history opens its resumable screen.

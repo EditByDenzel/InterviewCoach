@@ -99,6 +99,12 @@ The subsequent Consent 5 + Voice 4 attempt also received Google's reported
 phrase mismatch. Consent 5 is now the active Denzel consent file; Consent 4 is
 archived. No Denzel profile has been created and Onyi remains unchanged.
 
+## Shared conversation and recording storage
+
+With the backend URL configured, the app saves chat metadata and original audio here rather than in separate browser histories. Authenticated `/api/storage/ab`, `/api/storage/legacy` and `/api/storage/samples` routes list/import/update/delete records; `/api/assets/:id` stores immutable recordings and waveform metadata. Durable, ignored files live in `private/history/`. Revision checks reject stale updates. Deletion tombstones prevent browser migration backups from restoring removed chats; shared audio references are protected.
+
+Existing local sessions migrate on their first history load, with audio uploaded before metadata. Existing server records win over old browser copies. Original local stores remain as migration backups; new saves use the backend. Failure to reach the backend is an explicit retryable failure, not a separate offline history. Timing alone has an offline outbox. See [PHONE_ACCESS.md](../PHONE_ACCESS.md) for pending private HTTPS phone networking and migration limits.
+
 ## Background conversation timings
 
 Authenticated `POST /api/telemetry` accepts metadata-only event batches and appends per-session JSONL under the ignored `private/conversation-timings/` directory. This route does not invoke speech or use a speech concurrency slot. The app queues offline events locally and retries them without adding UI.

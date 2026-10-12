@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SavedConversation } from '../types';
 import { sampleConversations } from './sampleConversations';
+import { backendHistory, historyBackendEnabled } from '../services/historyBackend';
 
 const KEY = '@coachie_conversations_v1';
 let queue: Promise<void> = Promise.resolve();
@@ -17,7 +18,7 @@ const isConversation = (value: any): value is SavedConversation => {
       Number.isInteger(round.roundNumber) && round.roundNumber > 0);
 };
 
-export async function loadConversations(): Promise<SavedConversation[]> {
+async function loadLocalConversations(): Promise<SavedConversation[]> {
   const raw=await AsyncStorage.getItem(KEY);
   if(!raw)return [];
   let values:unknown;
@@ -28,12 +29,35 @@ export async function loadConversations(): Promise<SavedConversation[]> {
   return values.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
 }
 
+let migration: Promise<void> | null = null;
+async function migrateHistory() {
+  if (!migration) migration = (async()=>{
+    const local = await loadLocalConversations();
+    const deleted = await loadLocalDeletedSamples();
+    await backendHistory.migrate('legacy',local.map(value=>({id:value.id,value})));
+    await backendHistory.migrate('samples',[],deleted);
+  })().catch(error=>{migration=null;throw error;});
+  await migration;
+}
+export async function loadConversations(): Promise<SavedConversation[]> {
+  if (!historyBackendEnabled()) return loadLocalConversations();
+  await migrateHistory();
+  const values = (await backendHistory.list('legacy')).records.map(record=>record.value);
+  if (!values.every(isConversation)) throw historyError();
+  return values.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export function saveConversation(conversation:SavedConversation):Promise<void> {
   if (!isConversation(conversation)) return Promise.reject(new Error('This conversation is incomplete and could not be saved.'));
   const snapshot = { ...conversation, rounds: conversation.rounds.map(round => ({ ...round })) };
   // Serialize read/modify/write so rapid answers never overwrite another save.
   const operation=queue.catch(()=>{}).then(async()=>{
-    const existing=await loadConversations();
+    if (historyBackendEnabled()) {
+      await migrateHistory();
+      await backendHistory.save('legacy',snapshot.id,snapshot);
+      return;
+    }
+    const existing=await loadLocalConversations();
     await AsyncStorage.setItem(KEY,JSON.stringify([snapshot,...existing.filter(item=>item.id!==snapshot.id)]));
   });
   queue=operation;
@@ -42,7 +66,7 @@ export function saveConversation(conversation:SavedConversation):Promise<void> {
 
 const DELETED_SAMPLES_KEY = '@coachie_deleted_samples_v1';
 
-async function loadDeletedSamples(): Promise<string[]> {
+async function loadLocalDeletedSamples(): Promise<string[]> {
   const raw = await AsyncStorage.getItem(DELETED_SAMPLES_KEY);
   if (!raw) return [];
   let values: unknown;
@@ -50,9 +74,20 @@ async function loadDeletedSamples(): Promise<string[]> {
   if (!Array.isArray(values) || !values.every(value => typeof value === 'string')) throw historyError();
   return values;
 }
+async function loadDeletedSamples(): Promise<string[]> {
+  if (!historyBackendEnabled()) return loadLocalDeletedSamples();
+  await migrateHistory();
+  return (await backendHistory.list('samples')).deleted;
+}
 
 export function deleteConversation(id: string): Promise<void> {
   const operation = queue.catch(() => {}).then(async () => {
+    if (historyBackendEnabled()) {
+      await migrateHistory();
+      const namespace = sampleConversations.some(sample=>sample.id===id) ? 'samples' : 'legacy';
+      await backendHistory.remove(namespace,id);
+      return;
+    }
     const existing = await loadConversations();
     const isSample = sampleConversations.some(s => s.id === id);
     const deleted = isSample ? await loadDeletedSamples() : [];
@@ -73,6 +108,9 @@ export function createConversationId() { return `${Date.now().toString(36)}-${Ma
 
 /** Samples are bundled, clearly labeled, and never written over personal history. */
 export async function loadConversationLibrary(): Promise<SavedConversation[]> {
+  // A focus refresh must observe saves/deletions already queued by the chat.
+  // Keep this outside loadConversations(), which queue operations call themselves.
+  await queue.catch(() => {});
   const saved = await loadConversations();
   const deletedSamples = await loadDeletedSamples();
   return [

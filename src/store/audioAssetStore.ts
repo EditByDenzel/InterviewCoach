@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { readAudioAsBase64 } from '../services/audioService';
+import { historyBackendEnabled, historyRequest } from '../services/historyBackend';
 
 export interface AudioAsset { base64: string; mimeType: string; waveform?: number[] }
 export interface AudioAssetAdapter {
@@ -186,7 +187,29 @@ function webAdapter(): AudioAssetAdapter {
 }
 
 let defaultStore: ReturnType<typeof createAudioAssetStore> | null = null;
-function store() { return defaultStore ??= createAudioAssetStore(Platform.OS === 'web' ? webAdapter() : nativeAdapter()); }
+let localAssets: AudioAssetAdapter | null = null;
+const localAdapter = () => localAssets ??= Platform.OS === 'web' ? webAdapter() : nativeAdapter();
+
+/** Copy old device assets before publishing migrated session references. */
+export async function migrateAudioAssets(ids: string[]): Promise<void> {
+  if (!historyBackendEnabled()) return;
+  for (const id of new Set(ids)) {
+    const { asset: remote } = await historyRequest(`/api/assets/${encodeURIComponent(id)}`);
+    if (remote) continue;
+    const asset = await localAdapter().read(id);
+    if (!asset) throw new Error('An existing recording is missing. Migration stopped; your local chat has been preserved.');
+    await historyRequest(`/api/assets/${encodeURIComponent(id)}`, 'PUT', { asset: normalizeAsset(asset) });
+  }
+}
+
+function backendAdapter(): AudioAssetAdapter {
+  return {
+    async read(id) { const result = await historyRequest(`/api/assets/${encodeURIComponent(id)}`); return result.asset ? normalizeAsset(result.asset) : null; },
+    async write(id, asset) { await historyRequest(`/api/assets/${encodeURIComponent(id)}`, 'PUT', { asset }); },
+    async remove(id) { await historyRequest(`/api/assets/${encodeURIComponent(id)}`, 'DELETE'); },
+  };
+}
+function store() { return defaultStore ??= createAudioAssetStore(historyBackendEnabled() ? backendAdapter() : localAdapter()); }
 
 export const saveAudioAsset = (id: string, asset: AudioAsset): Promise<string> => store().saveAudioAsset(id, asset);
 export const loadAudioAsset = (id: string): Promise<AudioAsset | null> => store().loadAudioAsset(id);

@@ -7,23 +7,21 @@ import { RootStackParamList, SavedConversation } from '../types';
 import { pickScenarioImage } from '../services/scenarioImagePicker';
 import { loadSettings, updateSettings } from '../store/settingsStore';
 import { loadConversationLibrary } from '../store/conversationLibrary';
+import { homeConversationCards } from '../store/homeConversationCards';
 import { DesignFrame, DesignIcon, GlassButton, DESIGN, ProfileIcon } from '../components/CoachieDesign';
 import { MotionPressable } from '../components/Motion';
 import { TopicComposer } from '../components/TopicComposer';
 import { ConversationSidebar } from '../components/ConversationSidebar';
 
 type Props = StackScreenProps<RootStackParamList, 'Home'>;
-const suggestions = [
- {id:'sample-mock-interview',label:'Deploy Autonomous\nAI Agent',topic:'Deploy an autonomous AI agent to monitor liquidity pools. Make it a tactical trading bot.',rounds:3,icon:'interview' as const},
- {id:'sample-architecture',label:'System\nArchitecture\nReview',topic:'System Architecture Review',rounds:4,icon:'architecture' as const},
- {id:'sample-behavioral',label:'Behavioral STAR\nFramework',topic:'Behavioral STAR Framework',rounds:5,icon:'architecture' as const},
-];
 export default function HomeScreen({navigation,route}:Props) {
  const [topic,setTopic]=useState(''),[hasApiKey,setHasApiKey]=useState(false),[validation,setValidation]=useState('');
  const [sidebar,setSidebar]=useState(false),[conversations,setConversations]=useState<SavedConversation[]>([]),[historyError,setHistoryError]=useState(''),[loadingHistory,setLoadingHistory]=useState(false);
  const [language,setLanguage]=useState('English'),[languageOpen,setLanguageOpen]=useState(false),[savingLanguage,setSavingLanguage]=useState(false);
  const scrollRef = React.useRef<ScrollView>(null);
  const starting = React.useRef(false);
+ const historyRequest = React.useRef(0);
+ useEffect(()=>()=>{historyRequest.current++;},[]);
  useEffect(() => {
    if (Platform.OS !== 'web') return;
    const getEl = () => (scrollRef.current as any)?.getScrollableNode?.() || (scrollRef.current as any);
@@ -70,25 +68,18 @@ export default function HomeScreen({navigation,route}:Props) {
      window.removeEventListener('blur', onMouseUp);
    };
  }, []);
- const refreshHistory=useCallback(async()=>{setLoadingHistory(true);try{setConversations(await loadConversationLibrary());setHistoryError('');}catch{setHistoryError('Could not load your saved conversations. Please try again.');}finally{setLoadingHistory(false);}},[]);
- useFocusEffect(useCallback(()=>{let active=true;void loadSettings().then(settings=>{if(active){setHasApiKey(!!settings.geminiApiKey);setLanguage(settings.language||'English');}});void refreshHistory();return()=>{active=false;};},[refreshHistory]));
+ const refreshHistory=useCallback(async()=>{
+  const request=++historyRequest.current;
+  setLoadingHistory(true);
+  try{const library=await loadConversationLibrary();if(request===historyRequest.current){setConversations(library);setHistoryError('');}}
+  catch{if(request===historyRequest.current)setHistoryError('Could not load your saved conversations. Please try again.');}
+  finally{if(request===historyRequest.current)setLoadingHistory(false);}
+ },[]);
+ useFocusEffect(useCallback(()=>{let active=true;void loadSettings().then(settings=>{if(active){setHasApiKey(!!settings.geminiApiKey);setLanguage(settings.language||'English');}});void refreshHistory();return()=>{active=false;historyRequest.current++;};},[refreshHistory]));
  useEffect(()=>{if(route.params?.topic){setTopic(route.params.topic);navigation.setParams({topic:undefined});}},[route.params?.topic,navigation]);
 
  const mostRecentUserConv = conversations.find((c) => !c.isSample);
- const displaySuggestions = React.useMemo(() => {
-  if (!mostRecentUserConv) return suggestions;
-  const recentCard = {
-   id: mostRecentUserConv.id,
-   label: mostRecentUserConv.topic.length > 32 ? mostRecentUserConv.topic.slice(0, 30) + '…' : mostRecentUserConv.topic,
-   topic: mostRecentUserConv.topic,
-   rounds: mostRecentUserConv.rounds.length,
-   status: mostRecentUserConv.status === 'completed' ? 'Completed' : 'In progress',
-   isRecent: true,
-   isAB: mostRecentUserConv.isAB,
-   icon: 'interview' as const,
-  };
-  return [recentCard, ...suggestions.slice(0, 2)];
- }, [mostRecentUserConv]);
+ const displaySuggestions = React.useMemo(() => homeConversationCards(conversations), [conversations]);
 
  const start=()=>{
   if(starting.current)return;
