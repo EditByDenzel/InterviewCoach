@@ -1,5 +1,5 @@
 import { requestJson } from './geminiService';
-import { appBackendUrl } from './backendUrl';
+import { appBackendUrl, backendAuthHeaders } from './backendUrl';
 
 export const CUSTOM_VOICES = ['Onyi', 'Chidera', 'Denzel'] as const;
 export type CustomVoice = typeof CUSTOM_VOICES[number];
@@ -13,7 +13,7 @@ export async function generateCustomVoiceAudio(
   const base = customVoiceBackendUrl();
   if (!base) throw new Error('Custom voice service is not configured. Set EXPO_PUBLIC_TTS_BACKEND_URL and restart the app.');
   const response = await requestJson(`${base}/api/tts`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...backendAuthHeaders(apiKey) },
     body: JSON.stringify(payload),
   }, 'custom voice', 240000);
   if (response.mimeType !== 'audio/wav' || typeof response.audio !== 'string' || !response.audio) throw new Error('Custom voice service returned invalid audio.');

@@ -12,3 +12,10 @@ export function resolveBackendUrl(configured: string, origin?: string): string {
 }
 export const appBackendUrl = () => resolveBackendUrl(process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '',
   typeof window !== 'undefined' ? window.location?.origin : undefined);
+
+/** Keep app credentials separate from the protected gateway's own authentication. */
+export function backendAuthHeaders(key: string, base = appBackendUrl(),
+  origin = typeof window !== 'undefined' ? window.location?.origin : undefined): Record<string,string> {
+  const protectedOrigin = !!origin && origin.startsWith('https://') && base === origin;
+  return { [protectedOrigin ? 'X-Coachie-Authorization' : 'Authorization']: `Bearer ${key}` };
+}

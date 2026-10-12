@@ -41,3 +41,18 @@ it('authenticates requests and surfaces remote conflicts without exposing creden
   expect(global.fetch).toHaveBeenCalledWith('http://backend/api/storage/ab/one',expect.objectContaining({headers:expect.objectContaining({Authorization:'Bearer test-owner'})}));
  } finally {global.fetch=originalFetch;if(original===undefined)delete process.env.EXPO_PUBLIC_TTS_BACKEND_URL;else process.env.EXPO_PUBLIC_TTS_BACKEND_URL=original;}
 });
+
+it.each([
+ [{status:200,ok:true,redirected:true}, 'session expired'],
+ [{status:200,ok:true,redirected:false,headers:{get:()=> 'text/html'}}, 'session expired'],
+ [{status:403,ok:false,redirected:false}, 'HTTP 403'],
+])('distinguishes an access login page from a backend HTTP failure: %j',async(response,message)=>{
+ const original=process.env.EXPO_PUBLIC_TTS_BACKEND_URL;
+ const originalFetch=global.fetch;
+ process.env.EXPO_PUBLIC_TTS_BACKEND_URL='http://backend';
+ global.fetch=jest.fn(async()=>response as Response);
+ try {
+  await expect(historyRequest('/api/storage/ab')).rejects.toThrow(message);
+  expect(global.fetch).toHaveBeenCalledWith('http://backend/api/storage/ab',expect.objectContaining({credentials:'same-origin'}));
+ } finally { global.fetch=originalFetch;if(original===undefined)delete process.env.EXPO_PUBLIC_TTS_BACKEND_URL;else process.env.EXPO_PUBLIC_TTS_BACKEND_URL=original; }
+});

@@ -14,7 +14,8 @@ test('phone gateway serves only exported app files and preserves backend bearer 
   response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify({records:[],deleted:[]}));
  });
  await new Promise(resolve=>backend.listen(0,'127.0.0.1',resolve));
- const gateway=createPhoneGateway({root,backendPort:backend.address().port});
+ const events=[];
+ const gateway=createPhoneGateway({root,backendPort:backend.address().port,onRequest:event=>events.push(event)});
  await new Promise(resolve=>gateway.listen(0,'127.0.0.1',resolve));
  t.after(async()=>{await Promise.all([new Promise(resolve=>gateway.close(resolve)),new Promise(resolve=>backend.close(resolve))]);await rm(root,{recursive:true,force:true});});
  const base=`http://127.0.0.1:${gateway.address().port}`;
@@ -23,5 +24,8 @@ test('phone gateway serves only exported app files and preserves backend bearer 
  assert.equal((await fetch(base+'/api/other')).status,404);
  const response=await fetch(base+'/api/storage/ab',{headers:{authorization:'Bearer test-owner',origin:'https://phone.trycloudflare.com',cookie:'CF_Authorization=private'}});
  assert.equal(response.status,200);assert.deepEqual(await response.json(),{records:[],deleted:[]});
+ assert.equal((await fetch(base+'/api/storage/ab',{headers:{'x-coachie-authorization':'Bearer test-owner'}})).status,200);
  assert.equal((await fetch(base+'/index.html',{method:'POST'})).status,405);
+ assert.ok(events.some(event=>event.kind==='/api/storage' && event.status===200 && event.hasBearer));
+ assert.ok(events.every(event=>!JSON.stringify(event).includes('test-owner') && !JSON.stringify(event).includes('private')));
 });

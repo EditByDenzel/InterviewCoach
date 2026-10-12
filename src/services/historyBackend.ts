@@ -1,6 +1,6 @@
 import { loadSettings } from '../store/settingsStore';
 import { designPreviewEnabled } from '../dev/designPreview';
-import { appBackendUrl } from './backendUrl';
+import { appBackendUrl, backendAuthHeaders } from './backendUrl';
 
 type Namespace = 'ab' | 'legacy' | 'samples';
 interface BackendRecord { id: string; value: unknown; revision: number }
@@ -15,10 +15,14 @@ export async function historyRequest(path: string, method = 'GET', body?: unknow
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
     const response = await fetch(`${base}${path}`, { method, signal: controller.signal,
-      headers: { Authorization: `Bearer ${geminiApiKey}`, 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      headers: { ...backendAuthHeaders(geminiApiKey), 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (response.status === 409) throw new Error('This chat changed on another device or conflicts with saved data. Reopen it before continuing.');
-    if (!response.ok) throw new Error('Conversation backend could not save or load your data. Check the PC connection and retry.');
+    if (response.redirected || (response.ok && !response.headers.get('content-type')?.includes('application/json'))) {
+      throw new Error('Phone access session expired. Reload this page and sign in to Cloudflare again; your PC history is preserved.');
+    }
+    if (!response.ok) throw new Error(`Conversation backend could not save or load your data (HTTP ${response.status}). Check the PC connection and retry.`);
     return await response.json();
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw new Error('Conversation backend timed out. Your existing data has been preserved; retry when the PC is reachable.');

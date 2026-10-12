@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 - Phone access compatibility and bundled icons
+
+- Separate protected same-origin app authentication from Cloudflare headers; the gateway forwards the unchanged owner bearer for backend validation.
+- History identifies access-page redirects and reports HTTP failure status. Gateway diagnostics record only request categories, status, timing and auth/tunnel presence, without credentials or conversation content.
+- Web Figma icons use bundled SVG data URIs rather than extra protected image requests, preserving paths and dimensions.
+- Verification: 233 app tests, 19 backend tests and TypeScript pass; final exported app loads shared history locally. Physical-phone confirmation remains pending.
+
 All notable changes to InterviewCoach are documented here.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
 Versioning follows [Semantic Versioning](https://semver.org/).

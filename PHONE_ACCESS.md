@@ -26,7 +26,9 @@ On first history load, old browser/device sessions are imported without overwrit
 
 Backend revisions reject stale writes. Reopen a chat after a conflict; do not simultaneously conduct the same active session on both devices. The backend must be reachable for history reads and saves. Failed saves remain retryable in the chat; an offline conversation upload outbox is not implemented. Only timing events currently have a durable offline outbox.
 
-The PC custom TTS backend address remains localhost. The secure phone origin resolves it to the gateway instead, so no phone request points to the phone's localhost. The gateway preserves API bearer authentication; its protected same-origin access avoids mixed content and separate backend CORS setup.
+The PC custom TTS backend address remains localhost. The secure phone origin resolves it to the gateway instead, so no phone request points to the phone's localhost. Same-origin HTTPS requests carry the owner bearer in X-Coachie-Authorization, separate from Cloudflare access headers; the gateway maps it to Authorization for the backend's existing validation. Normal PC/native requests retain Authorization. History identifies access-page redirects and HTTP failures. Gateway stdout contains only request categories/status/timing and authentication/tunnel presence; no content or credentials.
+
+Web Figma icons use bundled SVG data URIs, avoiding extra protected image fetches without changing their design. A readable hostname requires a named Cloudflare Tunnel with DNS on a managed domain; Quick Tunnel hostnames are random and change on restart.
 
 ## Proposed implementation order
 

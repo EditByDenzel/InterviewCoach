@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { appBackendUrl } from './backendUrl';
+import { appBackendUrl, backendAuthHeaders } from './backendUrl';
 
 export interface TimingEvent {
   id: string; sessionId: string; run: 'A' | 'B'; turnId?: string; voice?: string; language?: string;
@@ -43,8 +43,8 @@ const backlog = createTimingBacklog(AsyncStorage, async events => {
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
     const response = await fetch(`${base}/api/telemetry`, {
-      method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key()}` },
+      method: 'POST', signal: controller.signal, credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...backendAuthHeaders(key()) },
       body: JSON.stringify({ events }),
     });
     if (!response.ok) throw new Error('Timing upload failed');

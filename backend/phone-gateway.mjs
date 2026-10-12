@@ -7,7 +7,7 @@ const types = { '.html':'text/html; charset=utf-8','.js':'application/javascript
   '.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.otf':'font/otf' };
 
 /** Loopback only. Publish exclusively behind email-protected Cloudflare access. */
-export function createPhoneGateway({ root, backendPort = 8787 }) {
+export function createPhoneGateway({ root, backendPort = 8787, onRequest = () => {} }) {
   const directory = resolve(root);
   return http.createServer(async (request,response)=>{
     response.setHeader('Cache-Control','no-store');
@@ -16,10 +16,20 @@ export function createPhoneGateway({ root, backendPort = 8787 }) {
     let pathname;
     try { pathname = decodeURIComponent(new URL(request.url,'http://localhost').pathname); }
     catch { response.writeHead(400);response.end();return; }
+    const started = Date.now();
+    // Metadata only: never log credentials, cookies, chat IDs, bodies or text.
+    response.once('finish', () => onRequest({ time: new Date().toISOString(),
+      kind: pathname.startsWith('/api/') ? pathname.split('/').slice(0,3).join('/') : extname(pathname) || 'page',
+      method: request.method, status: response.statusCode, durationMs: Date.now()-started,
+      hasBearer: !!(request.headers.authorization || request.headers['x-coachie-authorization']), throughTunnel: !!request.headers['cf-ray'] }));
     if (pathname.startsWith('/api/')) {
       // This proxy never injects a Gemini key. The app still authenticates every API call.
       if (!/^\/api\/(tts|telemetry|storage\/(ab|legacy|samples)(\/[^/]+)?|assets\/[^/]+)$/.test(pathname)) {response.writeHead(404);response.end();return;}
       const headers={...request.headers,host:`127.0.0.1:${backendPort}`};
+      // Cloudflare owns its access headers; our independent bearer still has
+      // to pass the backend's existing constant-time owner-key check.
+      if (headers['x-coachie-authorization']) headers.authorization=headers['x-coachie-authorization'];
+      delete headers['x-coachie-authorization'];
       // The gateway and backend are trusted local peers. Remote requests are
       // same-origin; preserve bearer auth and let the backend validate it.
       delete headers.origin;delete headers.cookie;delete headers['cf-access-jwt-assertion'];
@@ -45,5 +55,5 @@ export function createPhoneGateway({ root, backendPort = 8787 }) {
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   const root=fileURLToPath(new URL('../artifacts/phone/web/',import.meta.url));
-  createPhoneGateway({root}).listen(8085,'127.0.0.1',()=>console.log('Coachie protected-phone origin ready on loopback port 8085'));
+  createPhoneGateway({root, onRequest: event => console.log(JSON.stringify(event))}).listen(8085,'127.0.0.1',()=>console.log('Coachie protected-phone origin ready on loopback port 8085'));
 }

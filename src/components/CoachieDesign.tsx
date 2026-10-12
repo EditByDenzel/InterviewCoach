@@ -1,6 +1,5 @@
 import React, { PropsWithChildren, useState, useId, useEffect, useRef, useMemo } from 'react';
 import { View, Text, Animated, Easing, Image, StyleSheet, Platform, useWindowDimensions, StyleProp, ViewStyle, TextStyle, AccessibilityState } from 'react-native';
-import { Asset } from 'expo-asset';
 import { figmaSvg } from './FigmaSvg';
 import Svg, { Defs, RadialGradient, Stop, Rect, Circle, SvgXml, Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,9 +43,12 @@ const dimensions: Record<keyof typeof icons, [number,number]> = {
   homeSignal:[16,14],homeWifi:[14.4,10.2],batteryOutline:[21.8,11.8],batteryFill:[14.5,7],batteryTip:[1,3],chatSignal:[16,14],chatWifi:[17.0355,10.8303],
 };
 export function DesignIcon({ name }: { name: keyof typeof icons }) {
-  const uri = Asset.fromModule(icons[name]).uri;
   const [width,height] = dimensions[name];
-  return Platform.OS === 'web' ? <Image source={{uri}} style={{width,height}} /> : <SvgXml xml={figmaSvg[name]} />;
+  // Render the exact bundled Figma paths on every platform. Icons must not
+  // depend on separate image requests through the phone's login gateway.
+  return Platform.OS === 'web'
+    ? <Image source={{uri:`data:image/svg+xml;charset=utf-8,${encodeURIComponent(figmaSvg[name])}`}} style={{width,height}} accessible={false} />
+    : <SvgXml xml={figmaSvg[name]} width={width} height={height} />;
 }
 
 export function ProfileIcon({ size = 22, color = '#FFF' }: { size?: number; color?: string }) {

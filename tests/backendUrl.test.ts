@@ -1,7 +1,12 @@
-import {resolveBackendUrl} from '../src/services/backendUrl';
+import {resolveBackendUrl,backendAuthHeaders} from '../src/services/backendUrl';
 it('keeps main PC and native backend configuration unchanged',()=>{
  expect(resolveBackendUrl('http://localhost:8787/','http://localhost:8083')).toBe('http://localhost:8787');
  expect(resolveBackendUrl('http://localhost:8787/')).toBe('http://localhost:8787');
+});
+it('separates protected same-origin app auth while retaining normal backend bearer auth',()=>{
+ expect(backendAuthHeaders('owner','https://phone.trycloudflare.com','https://phone.trycloudflare.com')).toEqual({'X-Coachie-Authorization':'Bearer owner'});
+ expect(backendAuthHeaders('owner','http://localhost:8787','http://localhost:8083')).toEqual({Authorization:'Bearer owner'});
+ expect(backendAuthHeaders('owner','https://api.example.com','https://phone.example.com')).toEqual({Authorization:'Bearer owner'});
 });
 it('uses the secure phone gateway for history, custom voice and timing requests',()=>{
  expect(resolveBackendUrl('http://localhost:8787','https://test.trycloudflare.com')).toBe('https://test.trycloudflare.com');
