@@ -90,6 +90,15 @@ export function createRecordingSession(adapter: RecordingAdapter) {
     return true;
   });
 
+  const restart = () => run(async release => {
+    if (state.recording) {
+      try { await adapter.stop(); } catch (err) { report(err); }
+      change({ recording: false, paused: false, elapsedSeconds: 0, pendingUri: null });
+    }
+    release();
+    return start();
+  });
+
   const start = () => run(async () => {
     if (state.recording) return false;
     const id = ++captureId;
@@ -140,5 +149,5 @@ export function createRecordingSession(adapter: RecordingAdapter) {
     return disposal;
   };
 
-  return { start, end, pause, resume, prepareForReplay, tick, getSnapshot, dispose };
+  return { start, end, pause, resume, restart, prepareForReplay, tick, getSnapshot, dispose };
 }

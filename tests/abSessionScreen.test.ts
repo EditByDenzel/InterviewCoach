@@ -437,6 +437,15 @@ describe('Real A/B screen integration with controlled device and provider bounda
     expect(mockDecide).toHaveBeenCalledTimes(1); expect(mockTTS).toHaveBeenCalledTimes(1);
     expect(mockSaved!.turns[0].delivered).toBe(true); expect(mockStartRecording).toHaveBeenCalledTimes(1);
   });
+  it('starts capture afresh when user manually pauses speaking and presses play', async () => {
+    await mount(); await press('Start Model A');
+    expect(mockStartRecording).toHaveBeenCalledTimes(1);
+    await press('Pause conversation');
+    expect(mockPauseRecording).toHaveBeenCalledTimes(1);
+    await press('Resume conversation');
+    expect(mockStopRecording).toHaveBeenCalledTimes(1);
+    expect(mockStartRecording).toHaveBeenCalledTimes(2);
+  });
   it('saves model duration and measured waveform before any final vote', async () => {
     await mount(); await press('Start Model A'); await press('Finish model reply');
     const reply = mockSaved!.turns.find(t => t.speaker === 'model')!;

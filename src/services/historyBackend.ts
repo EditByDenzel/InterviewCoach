@@ -5,7 +5,30 @@ import { appBackendUrl, backendAuthHeaders } from './backendUrl';
 type Namespace = 'ab' | 'legacy' | 'samples';
 interface BackendRecord { id: string; value: unknown; revision: number }
 interface Library { records: BackendRecord[]; deleted: string[] }
-export const historyBackendEnabled = () => !designPreviewEnabled && !!(process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '').trim();
+
+const isLoopback = (host: string) => ['localhost', '127.0.0.1', '[::1]'].includes(host);
+
+export const historyBackendEnabled = () => {
+  if (designPreviewEnabled) return false;
+  const configured = (process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '').trim();
+  if (!configured) return false;
+  const base = appBackendUrl();
+  if (!base) return false;
+  try {
+    const backendHost = new URL(base).hostname;
+    if (isLoopback(backendHost)) {
+      if (typeof window !== 'undefined' && window.location?.hostname) {
+        if (!isLoopback(window.location.hostname)) return false;
+      }
+      if (typeof navigator !== 'undefined' && (navigator as any).product === 'ReactNative') {
+        return false;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return true;
+};
 
 export async function historyRequest(path: string, method = 'GET', body?: unknown): Promise<any> {
   const base = appBackendUrl();

@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, TextInput, Pressable } from 'react-native';
+import { View, Text, TextInput, Pressable, Share, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { RootStackParamList, AppSettings } from '../types';
 import { loadSettings, updateSettings } from '../store/settingsStore';
+import { exportCoachieData, importCoachieData } from '../services/backupService';
 import { SettingsPage, SettingRow, SettingIcon, Group, Action, S } from '../components/SettingsDesign';
 import { Orb, ProfileIcon } from '../components/CoachieDesign';
 import { MotionPressable } from '../components/Motion';
@@ -18,7 +19,7 @@ export default function SettingsScreen({navigation}:Props) {
  return <SettingsPage title="Settings" back={()=>navigation.goBack()}>
   <Group><View style={{padding:20,flexDirection:'row',gap:16,alignItems:'center'}}><View style={{width:48,height:48,borderRadius:24,backgroundColor:'rgba(255,92,28,.16)',borderWidth:1,borderColor:'rgba(255,180,120,.3)',alignItems:'center',justifyContent:'center'}}><ProfileIcon size={26} color="#FF9036"/></View><View style={{flex:1}}><Text style={S.title}>Your Coachie</Text><Text style={S.detail}>Make every conversation yours.</Text></View></View></Group>
   <View><Text style={S.label}>CONVERSATION PREFERENCES</Text><Group><SettingRow icon="language" title="Language" detail={settings?.language||'English'} onPress={()=>navigation.navigate('Preferences',{page:'language'})}/><SettingRow icon="voice" title="Voice" detail={settings?.ttsProvider==='elevenlabs'?'ElevenLabs':`Gemini · ${settings?.geminiVoice||'Kore'}`} last onPress={()=>navigation.navigate('Preferences',{page:'voice'})}/></Group></View>
-  <View><Text style={S.label}>APP & CONNECTIONS</Text><Group><SettingRow icon="key" title="API keys" detail={settings?.geminiApiKey?'Gemini connected':'Add a key to get started'} onPress={()=>navigation.navigate('Preferences',{page:'keys'})}/><SettingRow icon="info" title="About Coachie" detail={`Version ${app.expo.version}`} last onPress={()=>navigation.navigate('Preferences',{page:'about'})}/></Group></View>
+  <View><Text style={S.label}>APP & CONNECTIONS</Text><Group><SettingRow icon="key" title="API keys" detail={settings?.geminiApiKey?'Gemini connected':'Add a key to get started'} onPress={()=>navigation.navigate('Preferences',{page:'keys'})}/><SettingRow icon="backup" title="Backup & transfer" detail="Export or import conversations" onPress={()=>navigation.navigate('Preferences',{page:'backup'})}/><SettingRow icon="info" title="About Coachie" detail={`Version ${app.expo.version}`} last onPress={()=>navigation.navigate('Preferences',{page:'about'})}/></Group></View>
   <Text style={S.body}>Your preferences apply to new conversations. Review the speaking language before starting. Transcripts in A/B chats appear in English.</Text>
  </SettingsPage>;
 }
@@ -28,6 +29,7 @@ export function PreferencesScreen({navigation,route}:StackScreenProps<RootStackP
  const [voiceSearch,setVoiceSearch]=useState('');
  const filteredVoices=voices.filter(([name,description])=>`${name} ${description}`.toLowerCase().includes(voiceSearch.toLowerCase().trim()));
  const [visible,setVisible]=useState<Record<string,boolean>>({});
+ const [importText,setImportText]=useState(''),[exporting,setExporting]=useState(false),[importing,setImporting]=useState(false);
  useFocusEffect(useCallback(()=>{let active=true;void loadSettings().then(s=>{if(active)setSettings(s);});return()=>{active=false;};},[]));
  const change=(patch:Partial<AppSettings>)=>{setSettings(s=>s?{...s,...patch}:s);setMessage('');setError('');};
  const save=async()=>{
@@ -41,13 +43,50 @@ export function PreferencesScreen({navigation,route}:StackScreenProps<RootStackP
    await updateSettings(patch);setMessage(settings.language==='Thai'?'Saved. Thai interviews use Gemini 3.8 Flash TTS.':'Saved. Ready for your next conversation.');
   }catch{setError('Could not save. Please try again.');}finally{setSaving(false);}
  };
+ const handleExport=async()=>{
+  setExporting(true);setError('');setMessage('');try {
+   const bundle=await exportCoachieData();
+   const jsonString=JSON.stringify(bundle,null,2);
+   if(Platform.OS==='web'&&typeof document!=='undefined'){
+    const blob=new Blob([jsonString],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`coachie-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage(`Exported ${bundle.abSessions.length} A/B chats and ${bundle.legacyConversations.length} legacy chats.`);
+   } else {
+    await Share.share({
+     title: 'Coachie Data Backup',
+     message: jsonString,
+    });
+    setMessage(`Exported ${bundle.abSessions.length} A/B chats.`);
+   }
+  }catch(e:any){setError(e.message||'Could not export data.');}finally{setExporting(false);}
+ };
+ const handleImport=async()=>{
+  if(!importText.trim()){setError('Paste your Coachie backup JSON before importing.');return;}
+  setImporting(true);setError('');setMessage('');try {
+   let parsed:any;
+   try { parsed=JSON.parse(importText); }catch{ throw new Error('Invalid JSON. Make sure you pasted the complete backup data.'); }
+   const result=await importCoachieData(parsed);
+   setMessage(`Imported ${result.abCount} A/B sessions and ${result.legacyCount} legacy conversations.`);
+   setImportText('');
+  }catch(e:any){setError(e.message||'Import failed.');}finally{setImporting(false);}
+ };
  const field=(label:string,key:'geminiApiKey'|'elevenLabsApiKey'|'elevenLabsVoiceId',secret=false)=><View style={{gap:10}}><Text style={S.title}>{label}</Text><View style={{flexDirection:'row',gap:8,alignItems:'center'}}><TextInput accessibilityLabel={label} value={settings?.[key]||''} onChangeText={value=>change({[key]:value})} secureTextEntry={secret&&!visible[key]} autoCapitalize="none" autoCorrect={false} style={S.input}/>{secret&&<MotionPressable accessibilityRole="button" accessibilityLabel={`${visible[key]?'Hide':'Show'} ${label}`} onPress={()=>setVisible(v=>({...v,[key]:!v[key]}))} style={{width:44,height:44,alignItems:'center',justifyContent:'center'}}><SettingIcon name="eye"/></MotionPressable>}</View></View>;
- const titles={language:'Language',voice:'Voice',keys:'API keys',about:'About Coachie'};
- return <SettingsPage title={titles[page]} back={()=>navigation.goBack()} footer={page==='about'||!settings?undefined:<View style={{gap:8}}><Text accessibilityLiveRegion="polite" style={message?S.message:S.error}>{error||message}</Text><Action title={saving?'Saving…':'Save changes'} disabled={saving} onPress={()=>void save()}/></View>}>
+ const titles={language:'Language',voice:'Voice',keys:'API keys',about:'About Coachie',backup:'Backup & Transfer'};
+ return <SettingsPage title={titles[page]} back={()=>navigation.goBack()} footer={page==='about'||page==='backup'||!settings?undefined:<View style={{gap:8}}><Text accessibilityLiveRegion="polite" style={message?S.message:S.error}>{error||message}</Text><Action title={saving?'Saving…':'Save changes'} disabled={saving} onPress={()=>void save()}/></View>}>
   {page==='about'?<><View style={{gap:16}}><Orb/><Text style={S.heading}>{'Real conversations.\nClearer comparisons.'}</Text><Text style={S.body}>Coachie asks scenario questions to two models, follows up naturally, and helps you compare their replies. Enter a scenario or import a photo, run A then B, and choose which model helped more.</Text></View><Group><View style={{padding:20,gap:8}}><Text style={S.title}>Coachie {app.expo.version}</Text><Text style={S.body}>Built with Expo and React Native. A/B conversations, translation and comparison use Gemini. A/B speech uses Gemini Flash TTS; legacy interview sessions also support ElevenLabs.</Text></View></Group><View style={{gap:10}}><Text style={S.title}>Your data</Text><Text style={S.body}>API keys stay in this app’s local storage, which is not encrypted. Requests go to the provider needed for the feature. Recorded answers are sent to Gemini for transcription. A/B recordings, original transcripts, English translations and comparisons are saved on this device until you delete the chat. Custom voice speech passes through your configured Coachie backend to Gemini. Original model recordings may also be sent to Gemini for the requested comparison. Clearing app data or browser storage removes local evidence. Legacy interviews retain transcripts only. Sharing is your choice.</Text></View></>:!settings?<Text style={S.body}>Loading preferences…</Text>:<>
   {page==='language'&&<><View style={{gap:8}}><Text style={S.heading}>Speak your language.</Text><Text style={S.body}>Choose the language Coachie uses for questions, spoken responses, and feedback.</Text></View><Group>{languages.map(([value,native],i)=><SettingRow key={value} title={value} detail={native!==value?native:undefined} selected={settings.language===value} last={i===languages.length-1} onPress={()=>change({language:value})}/>)}</Group></>}
   {page==='voice'&&<><View style={{gap:8}}><Text style={S.heading}>Find your voice.</Text><Text style={S.body}>Choose a voice for new conversations. Each A/B pair keeps the same character and voice; you can audition it before starting. Gemini supports Thai.</Text></View><View><Text style={S.label}>VOICE ENGINE</Text><Group><SettingRow title="Gemini" detail="Uses your Gemini API key" selected={settings.ttsProvider==='gemini'} onPress={()=>change({ttsProvider:'gemini'})}/><SettingRow title="ElevenLabs" disabled={settings.language==='Thai'} detail={settings.language==='Thai'?'Thai interviews use Gemini 3.8 Flash TTS':'Requires an ElevenLabs API key'} selected={settings.ttsProvider==='elevenlabs'} last onPress={()=>change({ttsProvider:'elevenlabs'})}/></Group></View>{settings.ttsProvider==='gemini'?<View><Text style={S.label}>GEMINI 3.8 FLASH TTS</Text><Text style={[S.detail,{marginBottom:12}]}>Thai supported · Language detected from spoken text</Text><Text style={S.label}>VOICE</Text><TextInput accessibilityLabel="Search Gemini voices" placeholder="Search voices or tone" placeholderTextColor="#B8ADA7" value={voiceSearch} onChangeText={setVoiceSearch} style={[S.input,{marginBottom:12,flex:undefined}]}/><Text style={[S.detail,{marginBottom:12}]}>Selected: {settings.geminiVoice||'Kore'}</Text><Group>{filteredVoices.map(([name,description],i)=><SettingRow key={name} title={name} detail={description} selected={settings.geminiVoice===name} last={i===filteredVoices.length-1} onPress={()=>change({geminiVoice:name})}/>)}</Group>{filteredVoices.length===0&&<Text style={S.body}>No matching voices. Try another name or tone.</Text>}</View>:<><Text style={S.body}>Use a voice ID available in your ElevenLabs account. Rachel is the default voice ID.</Text>{field('ElevenLabs voice ID','elevenLabsVoiceId')}<Action secondary title="Manage API keys" onPress={()=>navigation.push('Preferences',{page:'keys'})}/></>}</>}
   {page==='keys'&&<><View style={{gap:8}}><Text style={S.heading}>Connect your coach.</Text><Text style={S.body}>Gemini powers questions, transcription, and its own voices. ElevenLabs is optional.</Text></View><Group><View style={{padding:16,gap:20}}>{field('Gemini API key','geminiApiKey',true)}{field('ElevenLabs API key','elevenLabsApiKey',true)}</View></Group><Text style={S.body}>Keys are stored locally. Saving a key does not verify provider access; requests use your provider’s account and limits.</Text></>}
+  {page==='backup'&&<><View style={{gap:8}}><Text style={S.heading}>Transfer your chats.</Text><Text style={S.body}>Export your A/B sessions and conversations to transfer them between phone and PC, or restore from a backup.</Text></View>
+   <View style={{gap:12}}><Text style={S.label}>EXPORT DATA</Text><Action title={exporting?'Exporting…':'Export all conversations'} disabled={exporting} onPress={()=>void handleExport()}/></View>
+   <View style={{gap:12,marginTop:16}}><Text style={S.label}>IMPORT DATA</Text><TextInput multiline numberOfLines={4} placeholder="Paste backup JSON bundle here…" placeholderTextColor="#9D8D82" value={importText} onChangeText={setImportText} style={[S.input,{minHeight:100,textAlignVertical:'top'}]}/><Action secondary title={importing?'Importing…':'Import conversations'} disabled={importing||!importText.trim()} onPress={()=>void handleImport()}/></View>
+   {!!(error||message)&&<Text accessibilityLiveRegion="polite" style={[message?S.message:S.error,{marginTop:12}]}>{error||message}</Text>}
+  </>}
 
   </>}
  </SettingsPage>;

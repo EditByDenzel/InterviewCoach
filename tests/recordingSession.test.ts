@@ -55,6 +55,17 @@ it('idle pauses, resume retains capture and elapsed time, and replay preserves t
   expect(adapter.onFinalized).toHaveBeenCalledWith('recording.m4a', 7);
 });
 
+it('restart discards previous paused recording and starts afresh with reset timer', async () => {
+  const { adapter, session } = fixture();
+  await session.start(); session.tick(8);
+  await session.pause();
+  expect(session.getSnapshot()).toMatchObject({ recording: true, paused: true, elapsedSeconds: 8 });
+  await session.restart();
+  expect(adapter.stop).toHaveBeenCalledTimes(1);
+  expect(adapter.start).toHaveBeenCalledTimes(2);
+  expect(session.getSnapshot()).toMatchObject({ recording: true, paused: false, elapsedSeconds: 0 });
+});
+
 it('ignores callbacks from earlier recordings', async () => {
   const { adapter, session } = fixture();
   await session.start();

@@ -11,6 +11,8 @@ export function SettingIcon({name, color='#D5CBC5'}:{name:string;color?:string})
     voice:'M9 18v3m6-3v3M5 10v2a7 7 0 0 0 14 0v-2M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3',
     key:'M14 10l7-7m-3 3 3 3M14 10a6 6 0 1 1-4-4',
     info:'M12 11v6m0-10v.1', eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12',
+    backup:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+    download:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   };
   return <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><Path d={paths[name]||paths.info}/>{name==='info'&&<Circle cx={12} cy={12} r={9}/>} {name==='eye'&&<Circle cx={12} cy={12} r={3}/>}</Svg>;
 }

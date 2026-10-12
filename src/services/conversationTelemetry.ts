@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appBackendUrl, backendAuthHeaders } from './backendUrl';
+import { historyBackendEnabled } from './historyBackend';
 
 export interface TimingEvent {
   id: string; sessionId: string; run: 'A' | 'B'; turnId?: string; voice?: string; language?: string;
@@ -37,6 +38,7 @@ export function createTimingBacklog(storage: Pick<typeof AsyncStorage, 'getItem'
 let key = () => '';
 export function configureTimingBacklog(getKey: () => string) { key = getKey; }
 const backlog = createTimingBacklog(AsyncStorage, async events => {
+  if (!historyBackendEnabled()) return;
   const base = appBackendUrl();
   if (!base || !key()) throw new Error('Timing backend not available');
   const controller = new AbortController();

@@ -90,9 +90,22 @@ export async function playBase64Audio(
   await setPlaybackMode();
   if (generation !== playbackGeneration) return;
 
-  // A cancelled creation must never overwrite another clip's backing file.
+  let objectUrl: string | null = null;
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof Blob !== 'undefined') {
+    try {
+      const binary = atob(base64Audio);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: playbackMimeTypes[extension] || 'audio/wav' });
+      objectUrl = URL.createObjectURL(blob);
+    } catch (_) {}
+  }
   const uri = `${FileSystem.cacheDirectory}tts_output_${generation}.${extension}`;
   const removeTempFile = async () => {
+    if (objectUrl) {
+      try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+      objectUrl = null;
+    }
     if (Platform.OS !== 'web') {
       try { await FileSystem.deleteAsync(uri, { idempotent: true }); } catch (_) {}
     }
@@ -109,7 +122,7 @@ export async function playBase64Audio(
   let sound: Audio.Sound;
   try {
     ({ sound } = await Audio.Sound.createAsync(
-      { uri: Platform.OS === 'web' ? `data:${playbackMimeTypes[extension]};base64,${base64Audio}` : uri },
+      { uri: Platform.OS === 'web' ? (objectUrl || `data:${playbackMimeTypes[extension]};base64,${base64Audio}`) : uri },
       { shouldPlay: false, volume: 1.0, isMuted: playbackMuted, progressUpdateIntervalMillis:100 },
     ));
   } catch (error) { await removeTempFile(); throw error; }

@@ -52,6 +52,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const setupAbort = useRef(new AbortController());
   const state = useRef(session), alive = useRef(true), exiting = useRef(false), busy = useRef(false), pausedRef = useRef(false), phaseRef = useRef<Phase>('ready');
   const automatic = useRef(true), settings = useRef<AppSettings | null>(null), finishRequested = useRef(false), retry = useRef<(() => Promise<void>) | null>(null);
+  const userPausedSpeaking = useRef(false);
   const log = useRef<ScrollView>(null), clipCache = useRef(new Map<string, string>()), lastTick = useRef(Date.now());
   const finalized = useRef<(uri: string, seconds: number) => Promise<void>>(async () => {});
   const temporaryReply = useRef<{ id: string; uri: string; run: 'A' | 'B'; seconds?: number } | null>(null);
@@ -145,6 +146,7 @@ export default function ABSessionScreen({ navigation, route }: Props) {
     ensureActive();
     patchTurn(turn.id, { audioAssetId: assetId }); await persist();
     if (pausedRef.current) { showPhase('paused'); return; }
+    if (playingId) await stopPlayback();
     showPhase('speaking'); setPlayingId(turn.id); setProgress(0);
     try {
       let firstProgress = true;
@@ -288,7 +290,17 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   };
   const togglePause = async () => {
     if (capture.current!.getSnapshot().recording) {
-      if (capture.current!.getSnapshot().paused) await capture.current!.resume(); else await capture.current!.pause();
+      if (capture.current!.getSnapshot().paused) {
+        if (userPausedSpeaking.current) {
+          userPausedSpeaking.current = false;
+          await capture.current!.restart();
+        } else {
+          await capture.current!.resume();
+        }
+      } else {
+        userPausedSpeaking.current = true;
+        await capture.current!.pause();
+      }
       return;
     }
     if (!pausedRef.current) {
@@ -300,15 +312,33 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       if (busy.current && turn.speaker === 'tasker' && phaseRef.current === 'speaking') { pausedRef.current = true; setPaused(true); showPhase('paused'); }
       await stopPlayback(); setPlayingId(null); return;
     }
-    if (busy.current) return;
+    // Replay is locked while Coachie is actively speaking. Replay is permitted during
+    // reasoning, transcribing, prepping TTS, and listening.
+    if (phaseRef.current === 'speaking') return;
+    await stopPlayback();
     const hadCapture = await capture.current!.prepareForReplay();
-    await operate(async () => {
-      const audio = turn.audioAssetId ? await loadAudioAsset(turn.audioAssetId) : null;
-      if (!audio) throw new Error('No saved audio is available for this turn.');
-      ensureActive(); setPlayingId(turn.id); setProgress(0);
-      try { await playBase64Audio(audio.base64, audioExtension(audio.mimeType), (position, duration) => { if (active()) { setProgress(duration ? position / duration : 0); if (duration && state.current.turns.find(t => t.id === turn.id)?.audioDurationSeconds !== duration / 1000) patchTurn(turn.id, { audioDurationSeconds: duration / 1000 }); } }); }
-      finally { if (active()) { setPlayingId(null); setProgress(0); if (hadCapture) { pausedRef.current = true; setPaused(true); showPhase('paused'); } } }
-    });
+    const audio = turn.audioAssetId ? await loadAudioAsset(turn.audioAssetId) : null;
+    if (!audio) {
+      if (hadCapture) { pausedRef.current = true; setPaused(true); showPhase('paused'); }
+      return;
+    }
+    ensureActive(); setPlayingId(turn.id); setProgress(0);
+    try {
+      await playBase64Audio(audio.base64, audioExtension(audio.mimeType), (position, duration) => {
+        if (active()) {
+          setProgress(duration ? position / duration : 0);
+          if (duration && state.current.turns.find(t => t.id === turn.id)?.audioDurationSeconds !== duration / 1000)
+            patchTurn(turn.id, { audioDurationSeconds: duration / 1000 });
+        }
+      });
+    } catch (err) {
+      if (active()) setError((err as Error).message || 'Audio replay failed.');
+    } finally {
+      if (active()) {
+        setPlayingId(null); setProgress(0);
+        if (hadCapture) { pausedRef.current = true; setPaused(true); showPhase('paused'); }
+      }
+    }
   };
   const finish = async () => {
     if (state.current.activeRun === 'A' && !state.current.turns.some(t => t.run === 'A' && t.speaker === 'tasker' && t.delivered)) return;
@@ -395,8 +425,14 @@ export default function ABSessionScreen({ navigation, route }: Props) {
   const canRecord = loaded && ongoing && !session.pendingReply && !temporaryReply.current && (recording || (!busy.current && !error));
   const record = () => {
     if (!canRecord) return;
-    if (capture.current!.getSnapshot().recording) void capture.current!.end();
-    else void capture.current!.start();
+    if (capture.current!.getSnapshot().recording) {
+      if (capture.current!.getSnapshot().paused) {
+        userPausedSpeaking.current = false;
+        void capture.current!.restart();
+      } else {
+        void capture.current!.end();
+      }
+    } else void capture.current!.start();
   };
   const submitTyped = () => {
     if (!draft.trim() || busy.current || session.pendingReply) return;
@@ -454,10 +490,10 @@ export default function ABSessionScreen({ navigation, route }: Props) {
       </View>}
     </View> : canStart ? <GlassButton label={session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start Model A'} onPress={() => void operate(begin)} style={chat.closePill}><Text style={chat.closeLabel}>{session.status === 'waiting_b' ? 'Start Model B' : session.status === 'comparing' ? 'Compare models' : 'Start conversation'}</Text></GlassButton>
     : ongoing && phase === 'ready' ? <GlassButton label="Resume saved run" onPress={() => void operate(begin)} style={chat.closePill}><Text style={chat.closeLabel}>Resume conversation</Text></GlassButton>
-    : ongoing && !recording && !['thinking','speaking','transcribing','comparing','ending'].includes(phase) ? <View style={[chat.spokenInputRow,inputFocused&&{borderColor:'#FFB083'}]}>
+    : ongoing && !recording && !autoListen && !['thinking','speaking','transcribing','comparing','ending'].includes(phase) ? <View style={[chat.spokenInputRow,inputFocused&&{borderColor:'#FFB083'}]}>
       <TextInput accessibilityLabel="Type model reply in selected speaking language" value={draft} onChangeText={value=>{setDraft(value);if(!value)setInputHeight(56);}} onSubmitEditing={submitTyped} onFocus={()=>setInputFocused(true)} onBlur={()=>setInputFocused(false)} returnKeyType="send" multiline blurOnSubmit onContentSizeChange={event=>setInputHeight(Math.min(110, Math.max(56, event.nativeEvent.contentSize.height)))} placeholder="Type a reply or tap mic to speak." placeholderTextColor="#A1A1AA" style={[chat.spokenQueryInput,{height:inputHeight},Platform.OS==='web'&&({outlineStyle:'none',scrollbarWidth:'none'} as any)]}/>
       {!!draft.trim() && <MotionPressable accessibilityRole="button" accessibilityLabel="Submit typed model reply" onPress={submitTyped} style={chat.inlineSendAction}><DesignIcon name="send"/></MotionPressable>}
-    </View> : ongoing ? <Text numberOfLines={2} style={chat.spokenFooterCaption}>{paused ? 'Tap resume to continue speaking.' : phase === 'speaking' ? 'Listen to the question above.' : recording ? 'Aira is listening to the model…' : 'Preparing next response…'}</Text> : null}
+    </View> : ongoing ? <Text numberOfLines={2} style={chat.spokenFooterCaption}>{paused ? 'Tap resume to continue speaking.' : phase === 'speaking' ? 'Listen to the question above.' : (recording || phase === 'listening') ? 'Aira is listening to the model…' : 'Preparing next response…'}</Text> : null}
     {ongoing && controls}
   </>;
   return <DesignFrame chat>

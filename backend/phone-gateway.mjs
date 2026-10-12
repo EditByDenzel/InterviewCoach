@@ -16,15 +16,18 @@ export function createPhoneGateway({ root, backendPort = 8787, onRequest = () =>
     let pathname;
     try { pathname = decodeURIComponent(new URL(request.url,'http://localhost').pathname); }
     catch { response.writeHead(400);response.end();return; }
+    // Protected Quick Tunnel middleware can intercept root /api requests.
+    // Keep public app routes under their own namespace and proxy internally.
+    const apiPath = pathname.replace(/^\/coachie(?=\/api\/)/, '');
     const started = Date.now();
     // Metadata only: never log credentials, cookies, chat IDs, bodies or text.
     response.once('finish', () => onRequest({ time: new Date().toISOString(),
-      kind: pathname.startsWith('/api/') ? pathname.split('/').slice(0,3).join('/') : extname(pathname) || 'page',
+      kind: apiPath.startsWith('/api/') ? apiPath.split('/').slice(0,3).join('/') : extname(pathname) || 'page',
       method: request.method, status: response.statusCode, durationMs: Date.now()-started,
       hasBearer: !!(request.headers.authorization || request.headers['x-coachie-authorization']), throughTunnel: !!request.headers['cf-ray'] }));
-    if (pathname.startsWith('/api/')) {
+    if (apiPath.startsWith('/api/')) {
       // This proxy never injects a Gemini key. The app still authenticates every API call.
-      if (!/^\/api\/(tts|telemetry|storage\/(ab|legacy|samples)(\/[^/]+)?|assets\/[^/]+)$/.test(pathname)) {response.writeHead(404);response.end();return;}
+      if (!/^\/api\/(tts|telemetry|storage\/(ab|legacy|samples)(\/[^/]+)?|assets\/[^/]+)$/.test(apiPath)) {response.writeHead(404);response.end();return;}
       const headers={...request.headers,host:`127.0.0.1:${backendPort}`};
       // Cloudflare owns its access headers; our independent bearer still has
       // to pass the backend's existing constant-time owner-key check.
@@ -33,7 +36,7 @@ export function createPhoneGateway({ root, backendPort = 8787, onRequest = () =>
       // The gateway and backend are trusted local peers. Remote requests are
       // same-origin; preserve bearer auth and let the backend validate it.
       delete headers.origin;delete headers.cookie;delete headers['cf-access-jwt-assertion'];
-      const upstream=http.request({hostname:'127.0.0.1',port:backendPort,path:request.url,method:request.method,headers},remote=>{
+      const upstream=http.request({hostname:'127.0.0.1',port:backendPort,path:request.url.replace(/^\/coachie(?=\/api\/)/, ''),method:request.method,headers},remote=>{
         response.writeHead(remote.statusCode,remote.headers);remote.pipe(response);
       });
       upstream.setTimeout(250000,()=>upstream.destroy());

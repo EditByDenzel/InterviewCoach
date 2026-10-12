@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-12 - Standalone mobile app, direct Google custom voice & data transfer
+
+- Standalone mobile network resilience: `historyBackendEnabled` now detects non-loopback clients (such as mobile browsers accessing over LAN or native Android apps) and disables PC loopback calls to `http://localhost:8787`, resolving the "Failed to fetch" error on mobile.
+- Direct Google TTS for cloned custom voices: Custom voices ('Onyi') now synthesize directly via Google Interactions API on mobile using their persistent Google Voice ID ('voice_uu52ugbuzjxe'), eliminating any requirement for a local PC backend or tunnel.
+- Portable Backup & Transfer: Added export and import capability for all A/B sessions and legacy conversations via JSON bundle in Settings > Backup & Transfer, enabling full data portability between mobile and PC without cloud lock-in.
+- Standalone local storage: Mobile clients now save all A/B sessions, conversations, and audio recordings directly to local durable storage (`AsyncStorage` and `IndexedDB` / `FileSystem`).
+- Speech recording restart afresh on pause: Pressing Play after pausing an active spoken answer now discards the previous partial take and restarts microphone capture cleanly from `0:00` instead of appending onto the paused recording.
+- Instant in-conversation speech playback: Removed the transactional busy lock on turn replay and optimized web playback with native Blob URLs, allowing immediate playback of model spoken turns and coach turns at any time during an active chat.
+- Anti-hallucination prompt rule for audio comparison: Explicitly barred guessing or naming proprietary voice brands or TTS engines (such as Microsoft Zira, Siri, or Alexa) when evaluating synthetic voice artifacts, without adding restrictive 'evaluate only' locks that could compromise multifaceted evaluation dimensions.
+- Active speech replay lock and cutoff: Replaying past audio turns is smoothly permitted during background reasoning, transcribing, prepping TTS, and listening, but locks out when Coachie is actively speaking and automatically cuts off any in-progress past replay as soon as Coachie's speech is ready to play.
+- Verification: 238 app tests passing, 19 backend tests passing, TypeScript clean.
+
+## 2026-10-12 - Isolate phone API routes from tunnel middleware
+
+- Protected phone history, recordings, timing and custom-voice requests now use /coachie/api/...; the gateway validates allowed routes and forwards them internally to /api. Main PC/native URLs are unchanged.
+- Phone diagnostic root /api requests failed before reaching the gateway with either auth header. Namespaced gateway forwarding and the rebuilt app pass local verification; physical-phone confirmation is pending.
+- Verification: 233 app tests, 19 backend tests, TypeScript.
+
 ## 2026-10-12 - Phone access compatibility and bundled icons
 
 - Separate protected same-origin app authentication from Cloudflare headers; the gateway forwards the unchanged owner bearer for backend validation.
@@ -213,7 +231,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   controls and mock chat close were checked; no paid provider call was needed.
 
 
-### Restore the original chat and remove scenario setup — 2026-10-11
+### Restore the original chat and remove scenario setup ï¿½ 2026-10-11
 
 - Removed the mandatory scenario review screen and all launch-time goal, role,
   facts, constraints, duration, search and priority controls. Sending a topic

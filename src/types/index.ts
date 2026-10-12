@@ -60,6 +60,6 @@ export type RootStackParamList = {
   Interview: { topic: string };
   Summary: { rounds: InterviewRound[]; closingMessage: string; topic: string; saveWarning?: string };
   Settings: undefined;
-  Preferences: { page: 'language' | 'voice' | 'keys' | 'about' };
+  Preferences: { page: 'language' | 'voice' | 'keys' | 'about' | 'backup' };
   Conversation: { id: string };
 };
