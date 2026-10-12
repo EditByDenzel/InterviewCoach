@@ -1,9 +1,11 @@
 jest.mock('../src/store/audioAssetStore', () => ({ loadAudioAsset: jest.fn(async () => null) }));
+jest.mock('../src/services/geminiFileService', () => ({ uploadComparisonAudio: jest.fn() }));
 
 import {
   compareRuns, decideNextTurn, structuredRequest, translateToEnglish, validateComparison,
 } from '../src/services/abConversationService';
 import { loadAudioAsset } from '../src/store/audioAssetStore';
+import { uploadComparisonAudio } from '../src/services/geminiFileService';
 import {
   ABComparison, ABSession, ABTurn, appendTurn, createABSession, endRun, startA, startB,
 } from '../src/domain/abSession';
@@ -188,6 +190,51 @@ describe('A/B conversation service safeguards', () => {
     const result = await compareRuns('test-key', endRun(sessionB(), { force: true }));
     expect(requestBody().contents[0].parts.filter((part: any) => part.inlineData)).toHaveLength(0);
     expect(result.limitations.some(value => value.includes('original model audio is unavailable'))).toBe(true);
+  });
+
+  it('includes B through a file reference when A has filled the inline budget', async () => {
+    const large = 'A'.repeat(12000004);
+    (loadAudioAsset as jest.Mock).mockResolvedValue({base64:large,mimeType:'audio/wav'});
+    const remove = jest.fn().mockResolvedValue(undefined);
+    (uploadComparisonAudio as jest.Mock).mockResolvedValue({fileData:{fileUri:'https://google/file-b',mimeType:'audio/wav'},remove});
+    respond(comparison);
+    const result = await compareRuns('test-key',endRun(sessionB(),{force:true}));
+    const parts = requestBody().contents[0].parts;
+    expect(parts.filter((part:any)=>part.inlineData)).toHaveLength(1);
+    expect(parts).toContainEqual({fileData:{fileUri:'https://google/file-b',mimeType:'audio/wav'}});
+    expect(parts).toContainEqual({text:'Original evaluated Model B audio for turn b-answer'});
+    expect(result.limitations.some(value=>value.includes('original model audio is unavailable'))).toBe(false);
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('uploads even a single over-budget clip, and removes uploads if judging fails', async () => {
+    (loadAudioAsset as jest.Mock).mockResolvedValue({base64:'A'.repeat(24000004),mimeType:'audio/wav'});
+    const remove = jest.fn().mockResolvedValue(undefined);
+    (uploadComparisonAudio as jest.Mock).mockResolvedValue({fileData:{fileUri:'https://google/file',mimeType:'audio/wav'},remove});
+    respond({...comparison,findings:[{dimension:'Audio',detail:'Unsupported',turnIds:['invented']}]});
+    await expect(compareRuns('test-key',endRun(sessionB(),{force:true}))).rejects.toThrow('unsupported evidence');
+    expect(requestBody().contents[0].parts.filter((part:any)=>part.fileData)).toHaveLength(2);
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops on upload failure instead of silently making a transcript-only judgment', async () => {
+    (loadAudioAsset as jest.Mock).mockResolvedValue({base64:'A'.repeat(24000004),mimeType:'audio/wav'});
+    const remove = jest.fn().mockResolvedValue(undefined);
+    (uploadComparisonAudio as jest.Mock).mockResolvedValueOnce({fileData:{fileUri:'https://google/file',mimeType:'audio/wav'},remove})
+      .mockRejectedValueOnce(new Error('Upload failed'));
+    respond(comparison);
+    await expect(compareRuns('test-key',endRun(sessionB(),{force:true}))).rejects.toThrow('Upload failed');
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a valid judgment and reports unconfirmed temporary-file cleanup', async () => {
+    (loadAudioAsset as jest.Mock).mockResolvedValue({base64:'A'.repeat(24000004),mimeType:'audio/wav'});
+    (uploadComparisonAudio as jest.Mock).mockResolvedValue({fileData:{fileUri:'https://google/file',mimeType:'audio/wav'},remove:jest.fn().mockRejectedValue(new Error('Offline'))});
+    respond(comparison);
+    const result=await compareRuns('test-key',endRun(sessionB(),{force:true}));
+    expect(result.recommendation).toBe('B');
+    expect(result.limitations.filter(value=>value.includes('cleanup could not be confirmed'))).toHaveLength(1);
   });
 
   it('continues with transcript evidence and explicit limits when saved audio cannot be read', async () => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-12 - Preserve original audio in larger A/B comparisons
+
+- Original evaluated model recordings that exceed the inline base64 budget now upload through Gemini Files API and remain attached to their exact model and turn. Later Model B recordings and oversized individual clips are no longer silently omitted.
+- Upload/preparation failures stop judging for retry. Temporary provider files are cleaned up after comparison success or failure when their IDs are known; unsuccessful cleanup is disclosed. Saved recordings and the chat UI are unchanged.
+- Added regression tests for overflow, both models using file references, failed uploads, invalid evidence, cleanup failures, exact upload bytes, processing states, unsafe upload addresses and timeouts.
+- Verification: all 247 app tests pass; TypeScript passes. A live synthetic-audio upload, active file reference and deletion passed. Vendor CORS preflight and upload-header exposure passed; a full physical-phone comparison has not been verified.
+
+
 ## 2026-10-12 - Standalone mobile app, direct Google custom voice & data transfer
 
 - Standalone mobile network resilience: `historyBackendEnabled` now detects non-loopback clients (such as mobile browsers accessing over LAN or native Android apps) and disables PC loopback calls to `http://localhost:8787`, resolving the "Failed to fetch" error on mobile.
