@@ -1,0 +1,49 @@
+import http from 'node:http';
+import { readFile, stat } from 'node:fs/promises';
+import { resolve, extname, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const types = { '.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css','.json':'application/json',
+  '.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.otf':'font/otf' };
+
+/** Loopback only. Publish exclusively behind email-protected Cloudflare access. */
+export function createPhoneGateway({ root, backendPort = 8787 }) {
+  const directory = resolve(root);
+  return http.createServer(async (request,response)=>{
+    response.setHeader('Cache-Control','no-store');
+    response.setHeader('X-Content-Type-Options','nosniff');
+    response.setHeader('Referrer-Policy','no-referrer');
+    let pathname;
+    try { pathname = decodeURIComponent(new URL(request.url,'http://localhost').pathname); }
+    catch { response.writeHead(400);response.end();return; }
+    if (pathname.startsWith('/api/')) {
+      // This proxy never injects a Gemini key. The app still authenticates every API call.
+      if (!/^\/api\/(tts|telemetry|storage\/(ab|legacy|samples)(\/[^/]+)?|assets\/[^/]+)$/.test(pathname)) {response.writeHead(404);response.end();return;}
+      const headers={...request.headers,host:`127.0.0.1:${backendPort}`};
+      // The gateway and backend are trusted local peers. Remote requests are
+      // same-origin; preserve bearer auth and let the backend validate it.
+      delete headers.origin;delete headers.cookie;delete headers['cf-access-jwt-assertion'];
+      const upstream=http.request({hostname:'127.0.0.1',port:backendPort,path:request.url,method:request.method,headers},remote=>{
+        response.writeHead(remote.statusCode,remote.headers);remote.pipe(response);
+      });
+      upstream.setTimeout(250000,()=>upstream.destroy());
+      upstream.on('error',()=>{if(!response.headersSent)response.writeHead(502,{'Content-Type':'application/json'});response.end(JSON.stringify({error:'The PC backend is unavailable. Please retry.'}));});
+      request.on('aborted',()=>upstream.destroy());request.pipe(upstream);return;
+    }
+    if (!['GET','HEAD'].includes(request.method)) {response.writeHead(405);response.end();return;}
+    const relative=pathname.replace(/^\/+/, '') || 'index.html';
+    const file=resolve(directory,relative);
+    if (!file.startsWith(directory+sep) || relative.split(/[\\/]/).some(part=>part.startsWith('.'))) {response.writeHead(404);response.end();return;}
+    try {
+      const data=await stat(file);
+      if(!data.isFile())throw new Error('not a file');
+      const contents=request.method==='HEAD'?undefined:await readFile(file);
+      response.writeHead(200,{'Content-Type':types[extname(file)]||'application/octet-stream'});
+      response.end(contents);
+    } catch {response.writeHead(404);response.end();}
+  });
+}
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
+  const root=fileURLToPath(new URL('../artifacts/phone/web/',import.meta.url));
+  createPhoneGateway({root}).listen(8085,'127.0.0.1',()=>console.log('Coachie protected-phone origin ready on loopback port 8085'));
+}

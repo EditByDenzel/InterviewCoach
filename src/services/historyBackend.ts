@@ -1,5 +1,6 @@
 import { loadSettings } from '../store/settingsStore';
 import { designPreviewEnabled } from '../dev/designPreview';
+import { appBackendUrl } from './backendUrl';
 
 type Namespace = 'ab' | 'legacy' | 'samples';
 interface BackendRecord { id: string; value: unknown; revision: number }
@@ -7,7 +8,7 @@ interface Library { records: BackendRecord[]; deleted: string[] }
 export const historyBackendEnabled = () => !designPreviewEnabled && !!(process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '').trim();
 
 export async function historyRequest(path: string, method = 'GET', body?: unknown): Promise<any> {
-  const base = (process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '').trim().replace(/\/$/, '');
+  const base = appBackendUrl();
   const { geminiApiKey } = await loadSettings();
   if (!base || !geminiApiKey) throw new Error('Conversation backend is not configured. Your existing data has been preserved.');
   const controller = new AbortController();

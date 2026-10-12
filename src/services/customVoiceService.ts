@@ -1,8 +1,9 @@
 import { requestJson } from './geminiService';
+import { appBackendUrl } from './backendUrl';
 
 export const CUSTOM_VOICES = ['Onyi', 'Chidera', 'Denzel'] as const;
 export type CustomVoice = typeof CUSTOM_VOICES[number];
-export const customVoiceBackendUrl = () => (process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '').trim().replace(/\/$/, '');
+export const customVoiceBackendUrl = appBackendUrl;
 export const isCustomVoice = (voice: string): voice is CustomVoice => CUSTOM_VOICES.some(name => name === voice);
 
 export async function generateCustomVoiceAudio(

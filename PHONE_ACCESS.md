@@ -1,6 +1,22 @@
 # Phone access and PC history
 
-Recommendation, 2026-10-12: start with private HTTPS mobile web hosted on the PC, then consider native builds after physical iPhone/Android audio tests. Backend persistence is implemented; private phone networking has not been deployed.
+Phone testing, 2026-10-12: an email-protected Cloudflare Quick Tunnel now exposes a production web build connected to the existing PC backend. The VPS is unchanged. Physical iPhone/Android audio tests remain outstanding.
+
+## Current test access
+
+The exported app lives in ignored artifacts/phone/web. backend/phone-gateway.mjs serves it on loopback port 8085 and proxies only the known API routes to the existing backend on 8787. A Cloudflare Quick Tunnel must always run with --allowed-mail restricting it to the owner's chosen address; do not expose the build with an unprotected tunnel. The protected build contains the owner's existing client-side account configuration and is not a public release artifact.
+
+On the phone, open the generated HTTPS URL, enter the allowed email, complete the emailed code, and allow microphone access when using Coachie. Keep the PC awake and the backend, gateway and Cloudflare process running. The URL changes when the tunnel restarts. The app's history/custom voice/timing requests use the same HTTPS origin instead of the phone's localhost. Normal PC development stays on 8083 with its existing backend configuration.
+
+To rebuild the protected test app with the actual account configuration and a fresh Metro cache:
+
+```
+node --env-file-if-exists=.env node_modules/expo/bin/cli export --platform web --output-dir artifacts/phone/web --clear
+node backend/phone-gateway.mjs
+artifacts/phone/cloudflared.exe tunnel --url http://127.0.0.1:8085 --allowed-mail <your-allowed-email> --protocol http2 --no-autoupdate
+```
+
+Local browser verification loaded the shared completed life-after-school chat and other saved history. An unauthenticated visit to the public tunnel reached Cloudflare's email login screen. This does not prove physical-phone capture or latency.
 
 ## Current state
 
@@ -10,12 +26,12 @@ On first history load, old browser/device sessions are imported without overwrit
 
 Backend revisions reject stale writes. Reopen a chat after a conflict; do not simultaneously conduct the same active session on both devices. The backend must be reachable for history reads and saves. Failed saves remain retryable in the chat; an offline conversation upload outbox is not implemented. Only timing events currently have a durable offline outbox.
 
-The current custom TTS backend address uses localhost. On a phone that refers to the phone, not this PC. Phone access needs a reachable HTTPS backend URL and its allowed origin configured, as well as HTTPS for the web app's microphone access.
+The PC custom TTS backend address remains localhost. The secure phone origin resolves it to the gateway instead, so no phone request points to the phone's localhost. The gateway preserves API bearer authentication; its protected same-origin access avoids mixed content and separate backend CORS setup.
 
 ## Proposed implementation order
 
 1. Verify the automatic migration from the browser containing the actual chats. Preserve its existing stores until migration is verified.
-2. Serve the app and backend under private HTTPS, for example with Tailscale Serve. The PC must be running. A production web build improves loading and avoids dependence on the development server. Do not expose the current single-owner Gemini-key authentication as a public multi-user service.
+2. Use the current protected Cloudflare test link. Tailscale Serve remains an alternative for installed private-network clients. Do not expose the current single-owner Gemini-key authentication as a public multi-user service.
 3. Test phone/PC history refresh, interrupted uploads, duplicate retries, cross-device deletion, and iPhone/Android mic permission, silence detection, playback and interruptions. Completed and unfinished sessions must load without a final vote.
 4. Add a durable conversation outbox only if disconnected operation is required, with conflict handling that never overwrites newer backend revisions.
 

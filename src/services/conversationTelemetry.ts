@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { appBackendUrl } from './backendUrl';
 
 export interface TimingEvent {
   id: string; sessionId: string; run: 'A' | 'B'; turnId?: string; voice?: string; language?: string;
@@ -36,7 +37,7 @@ export function createTimingBacklog(storage: Pick<typeof AsyncStorage, 'getItem'
 let key = () => '';
 export function configureTimingBacklog(getKey: () => string) { key = getKey; }
 const backlog = createTimingBacklog(AsyncStorage, async events => {
-  const base = (process.env.EXPO_PUBLIC_TTS_BACKEND_URL || '').trim().replace(/\/$/, '');
+  const base = appBackendUrl();
   if (!base || !key()) throw new Error('Timing backend not available');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);

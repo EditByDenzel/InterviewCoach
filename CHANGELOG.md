@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Protected Cloudflare phone test - 2026-10-12
+
+- Add a loopback phone gateway for an exported web build and known backend API routes. Protect the temporary Cloudflare URL with the owner-selected email login; no VPS deployment or public app release.
+- Resolve history, custom voice and telemetry calls to the protected phone origin instead of the phone's localhost. Main PC configuration and saved keys remain unchanged.
+- Rebuild with explicit dotenv loading and a cleared Metro cache so the protected phone build retains the actual account configuration. Generated builds, binaries and logs remain ignored.
+- Verified shared history including the completed life-after-school chat, backend gateway HTTP 200 and the public URL's unauthenticated email login gate. Physical phone recording and process latency require the user's test.
+- Passed 229 app tests, 19 backend tests and TypeScript. Read-only VPS capacity checks showed ample current headroom; performance with real workloads remains unbenchmarked.
+
 ### Shared backend history and Home cards - 2026-10-12
 
 - Home now renders every saved conversation from the shared library, newest first. Deleted sample cards stay deleted; original card gradients, sizing and hidden scrollbars are preserved.
